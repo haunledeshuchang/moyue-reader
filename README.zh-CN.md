@@ -17,7 +17,7 @@
 
 ---
 
-参考小幻阅读（Rodel.Reader）的产品形态，结合 WPS 式阅读习惯与个人需求，从零构建。
+
 
 <div align="center">
 <img src="docs/screenshots/shelf.png" width="880" alt="书架">
