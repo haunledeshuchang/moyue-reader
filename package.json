@@ -1,0 +1,113 @@
+{
+  "name": "moyue-reader",
+  "version": "0.1.1",
+  "description": "MoYue (墨阅) — a local-first, paper-like EPUB/PDF/TXT/MOBI reader for Windows with two-page spreads, real book typography and annotations.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "epubjs": "0.3.93",
+    "jszip": "3.10.2",
+    "pdfjs-dist": "4.10.38"
+  },
+  "devDependencies": {
+    "electron": "40.2.1",
+    "electron-builder": "latest",
+    "ws": "^8.22.0"
+  },
+  "build": {
+    "appId": "com.moyue.reader",
+    "productName": "墨阅",
+    "copyright": "Copyright © 2026 MoYue",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "build/icon.ico",
+      "!node_modules/**/*",
+      "!src/**/*.map",
+      "!test-files/**/*",
+      "!refs/**/*",
+      "!test/**/*",
+      "!**/*.md"
+    ],
+    "afterPack": "build/afterPack.cjs",
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "墨阅MoYue-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "墨阅 MoYue",
+      "uninstallDisplayName": "墨阅 MoYue ${version}",
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "language": "2052"
+    },
+    "portable": {
+      "artifactName": "墨阅MoYue-${version}-便携版.${ext}"
+    },
+    "asar": true,
+    "compression": "maximum",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
+  },
+  "author": {
+    "name": "haunledeshuchang",
+    "url": "https://github.com/haunledeshuchang"
+  },
+  "homepage": "https://github.com/haunledeshuchang/moyue-reader#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haunledeshuchang/moyue-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/haunledeshuchang/moyue-reader/issues"
+  },
+  "keywords": [
+    "ebook",
+    "reader",
+    "epub",
+    "pdf",
+    "mobi",
+    "azw3",
+    "txt",
+    "electron",
+    "windows",
+    "annotations",
+    "typography",
+    "offline"
+  ]
+}

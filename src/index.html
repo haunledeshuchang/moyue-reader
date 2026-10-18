@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' moyue-app: moyue-book: data: blob:; script-src 'self' moyue-app: 'unsafe-inline'; style-src 'self' moyue-app: 'unsafe-inline'; img-src 'self' moyue-app: moyue-book: data: blob:; font-src 'self' moyue-app: data:; connect-src 'self' moyue-app: moyue-book: data: blob:"/>
+  <title>墨阅 MoYue</title>
+  <link rel="stylesheet" href="/src/css/bookshelf.css"/>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">墨</span>
+      <div class="brand-text">
+        <h1>墨阅</h1>
+        <span class="brand-sub">MoYue Reader</span>
+      </div>
+    </div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="searchInput" type="text" placeholder="搜索书名、作者…" autocomplete="off"/>
+    </div>
+    <div class="header-actions">
+      <select id="sortSelect" class="select" title="排序方式">
+        <option value="recent">最近阅读</option>
+        <option value="added">最近导入</option>
+        <option value="title">书名</option>
+        <option value="progress">阅读进度</option>
+      </select>
+      <button id="viewToggle" class="btn btn-icon" title="切换视图">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+      <button id="themeToggle" class="btn btn-icon" title="切换主题（日间/夜间/护眼）">
+        <span id="themeIcon">☀</span>
+      </button>
+      <button id="importBtn" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        导入图书
+      </button>
+    </div>
+  </header>
+
+  <main class="shelf-wrap">
+    <div id="emptyState" class="empty-state" hidden>
+      <div class="empty-art">
+        <svg viewBox="0 0 120 90" width="120" height="90" fill="none">
+          <rect x="14" y="12" width="42" height="60" rx="3" stroke="currentColor" stroke-width="2" opacity=".5"/>
+          <rect x="64" y="12" width="42" height="60" rx="3" stroke="currentColor" stroke-width="2" opacity=".5"/>
+          <path d="M20 26h30M20 34h30M20 42h20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".3"/>
+          <path d="M70 26h30M70 34h30M70 42h20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".3"/>
+        </svg>
+      </div>
+      <h2>书架空空如也</h2>
+      <p>把 EPUB、PDF、TXT、MOBI 文件拖到这里，或点击右上角「导入图书」</p>
+      <p class="empty-tip">支持格式：.epub .pdf .txt .mobi .azw3</p>
+    </div>
+    <div id="bookGrid" class="book-grid"></div>
+    <div id="bookList" class="book-list" hidden></div>
+  </main>
+
+  <footer class="statusbar">
+    <span id="statusCount">0 本图书</span>
+    <span id="statusSize"></span>
+    <span class="status-right">墨阅 MoYue · 本地阅读，隐私无忧</span>
+  </footer>
+
+  <div id="dropOverlay" class="drop-overlay" hidden>
+    <div class="drop-inner">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+      <p>松开鼠标，导入图书</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/src/vendor/jszip.min.js"></script>
+  <script src="/src/vendor/epub.js"></script>
+  <script type="module" src="/src/js/bookshelf.js"></script>
+</body>
+</html>
