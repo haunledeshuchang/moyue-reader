@@ -35,7 +35,7 @@ It is a single-purpose, offline Windows app. No account, no sync, no telemetry, 
 - **Real book typography.** 2-em first-line indent, 0.26 em paragraph spacing, justified text with `text-justify: inter-character`, `line-break: strict`, `text-spacing-trim` / `text-autospace` for CJK–Latin mixing. EPUB only gets an indent injected when the publisher supplied neither indent nor paragraph spacing.
 - **A hand-written MOBI parser.** No conversion step, no Calibre. PalmDOC LZ77 + HUFF/CDIC, MOBI6 and KF8, EXTH metadata, cover & inline image extraction, DRM detection.
 - **Annotations with three different locators.** CFI for EPUB, in-chapter text offsets for TXT/MOBI, in-page offsets for PDF — all landing in one store, exportable as Markdown.
-- **82 MB installed, 77 MB download.** And it still ships full Chromium 144 typography features (see [Size](#-size-987-mb--77-mb)).
+- **77 MB to download** (264 MB installed). And it still ships full Chromium 144 typography features — see [Size](#-size-987-mb--77-mb).
 
 ## 📚 Supported formats
 
