@@ -32,3 +32,6 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# 临时探测文件
+gr.json

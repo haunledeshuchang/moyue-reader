@@ -135,6 +135,13 @@ try {
     await mouse(send, 'mousePressed', x, y);
     await mouse(send, 'mouseReleased', x, y);
     console.log('已点击:', x, y);
+  } else if (cmd === 'rclick') {
+    // rclick <x> <y> — 右键单击（真实派发，会触发 contextmenu）
+    const [x, y] = args.map(Number);
+    await mouse(send, 'mouseMoved', x, y);
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'right', clickCount: 1, buttons: 2 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'right', clickCount: 1, buttons: 0 });
+    console.log('已右键:', x, y);
   } else if (cmd === 'mousemove') {
     const [x, y] = args.map(Number);
     await mouse(send, 'mouseMoved', x, y);

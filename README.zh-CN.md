@@ -17,8 +17,6 @@
 
 ---
 
-
-
 <div align="center">
 <img src="docs/screenshots/shelf.png" width="880" alt="书架">
 </div>
@@ -46,15 +44,15 @@
 
 - **双页对开（像翻开一本真书）**：EPUB / MOBI / TXT 在宽屏下自动左右两页对开，中间是**WPS 式竖向虚线分页线** + 极轻书脊渐变；窗口变窄时自动回退单页，始终不挤压。模式随时可切「单页 / 双页 / 滚动」。
 - **左右页严格居中（等比留白）**：正文列到中缝的距离 = 到外侧页边的距离（实测 1904px 窗口下双双 140px），两侧空出的余白正好用来写旁批。单页模式同理：版心居中等分左右留白。**打开目录侧栏 / 标注抽屉后舞台变窄，会立刻按新宽度重新分栏**，文字始终在剩余空间里居中，不会被推出屏幕右侧。
-- **左右翻页（含 PDF）**：EPUB/MOBI/TXT 用键盘 `←`/`→` 或贴边箭头翻页，跨章无缝衔接，60fps 满帧。**已取消鼠标拖拽 / 触控板滑动翻页**——避免划词、批注时误翻页，指针完全交给文字选择。**PDF 也改为左右翻页**（横向分页 + scroll-snap，整页完整可见，不再是上下滚动）。
+- **左右翻页（含 PDF）**：只有两条路——键盘 `←`/`→`，以及屏幕左右边缘**鼠标碰到才浮现的翻页按钮**。鼠标在正文里单击、双击、右键、拖拽、滑动**一律不翻页**：划词标注本来就是按住拖动，任何一次误翻都会把选区清掉，所以干脆把指针完整地留给文字。翻页按钮做成 64×148 的隐形大按钮（视觉上仍是 44px 圆钮），鼠标偏个十几像素也点得中。**PDF 也是左右翻页**（横向分页 + scroll-snap，整页完整可见，不再是上下滚动）。
 - **一次只翻一页**：所有格式每次翻页严格前进/后退一个「页/跨页」，页码随之 +1，不会出现「感觉翻了两页」。
 - **翻页效果三档**：滑动（默认，参考 Moon+ / WPS）/ 淡入 / 无，随心切换。
-- **翻页箭头（WPS 式，全格式可见）**：屏幕左右边缘的悬浮箭头默认隐藏，鼠标贴近边缘才淡入，**点击箭头才翻页**；点正文、拖选文字都不会翻页。
-- **左下角全书总页码（全格式）**：显示「第 35 / 212 页」这样的**全书页码**而不是章节页码；每翻一页严格 +1，切换单/双页、字号、窗口大小时总页数稳定不乱跳（PDF 为「第 3 / 8 页」）。
+- **翻页箭头（WPS 式，全格式可见）**：屏幕左右边缘的悬浮箭头默认隐藏，鼠标贴近边缘才淡入；**鼠标只要还停在边缘，箭头就一直不走**（以前 1.8 秒自动消失，稍一犹豫就点空，感觉像「点了没反应」）。
+- **左下角全书总页码（全格式）**：显示「第 35 / 212 页」这样的**全书页码**而不是章节页码；每翻一页严格 +1。**EPUB 的页数是真排出来的，不是估的**——按当前字号/行距/版心把每个章节离屏重排一遍（连章节自带的 stylesheet 一起加载），扉页、版权页这种短章不会再被算成整页；改字号后按新版式重算，总页数稳定不乱跳（PDF 为「第 3 / 8 页」）。
 - **上下各留一行**：EPUB / MOBI / TXT 的正文块上下各留出正好一行行高的空白（与页眉、页脚等距），不会顶格。
 - **纸书级排版**：首行缩进 2 字符、段间 0.26em、两端对齐（`text-justify: inter-character`）、`line-break: strict`、`text-spacing-trim` / `text-autospace`（中西文自动间距、标点挤压）；EPUB 仅在出版方「无缩进且段间无留白」时才补缩进，不破坏原书版式。
 - **常驻控制栏**：阅读时顶部的目录 / 主题 / 版式控制栏始终显示，中途不可关闭，随时可调。
-- **彩色标注（6 色荧光笔）**：顶栏荧光笔面板或选中文字浮出的工具栏提供红/橙/黄/绿/蓝/紫六色，对重点句段做高亮，复读时一眼可辨。
+- **彩色标注（6 色荧光笔）**：顶栏荧光笔面板或选中文字浮出的工具栏提供红/橙/黄/绿/蓝/紫六色，对重点句段做高亮，复读时一眼可辨。**颜色只落在字上**——EPUB 用 CSS Highlight API（`::highlight`）绘制，由浏览器按字形填充，不会像矩形覆盖层那样按行盒画出一整条比字还高的色带，也不会在翻页、改字号后错位糊到别处；TXT/MOBI/PDF 用内联 `<mark>`，同样紧贴文字。
 - **阅读批注（仿 Word 边注）**：选中文字后点「批注」，在旁白编辑区写下阅读心得（Ctrl+Enter 保存）。所有标注与批注汇总于右侧抽屉，支持**跳转 / 修改 / 删除**，并可**一键导出 Markdown** 笔记。
 - **版式调节**：字号、行距、字体（系统/宋体/黑体/楷体/**Times New Roman**）、页边距
 - **目录导航**：EPUB 完整目录、MOBI/TXT 智能章节识别（支持「第 X 章」「Chapter N」「序/楔子/尾声」等中英文模式）
@@ -96,7 +94,19 @@
 
 ### 方式一：安装包（推荐）
 
-下载 `墨阅MoYue-0.1.1-x64.exe` 双击安装，或使用便携版 `墨阅MoYue-0.1.1-便携版.exe` 免安装直接运行。
+国内建议走 Gitee（不用代理、速度快）：[**Gitee 发行版**](https://gitee.com/huanledeshuchang/moyue-reader/releases/latest) ；海外或想看看项目主页，走 [GitHub Releases](https://github.com/haunledeshuchang/moyue-reader/releases/latest)。
+
+| 版本 | 文件名 | 说明 |
+|---|---|---|
+| 安装版 | `MoYue-0.1.2-x64.exe` | 双击安装，建桌面与开始菜单快捷方式，关联 epub/pdf/mobi/txt |
+| 便携版 | `MoYue-0.1.2-portable.exe` | 单个 exe，免安装直接运行，可放 U 盘 |
+
+Gitee 直链（右键另存／复制到下载工具）：
+
+- 安装版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-x64.exe`
+- 便携版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-portable.exe`
+
+Windows x64，未签名，SmartScreen 可能提示一次（更多信息 → 仍要运行）。
 
 ### 方式二：开发模式
 
@@ -162,7 +172,7 @@ moyue-reader/
 
 ### 体积优化
 
-- **运行时降档**：Electron 44 → **40（Chromium 144）**，安装包 98.7MB → 77MB；`text-spacing-trim`、`text-autospace`、`color-mix` 等排版新特性全部保留。
+- **运行时降档**：Electron 44 → **40（Chromium 144）**，安装包 98.7MB → 80MB；`text-spacing-trim`、`text-autospace`、`color-mix` 等排版新特性全部保留。
 - **裁掉无用组件**：`build/afterPack.cjs` 在打包后删除 `dxcompiler.dll` / `dxil.dll`（Dawn / WebGPU 着色器编译器，共 25.9MB）——阅读器只用 2D 合成与分页排版，从不调用 WebGPU。`vk_swiftshader`（显卡异常时的软件兜底）和 `LICENSES.chromium.html`（Chromium 许可证）保留。
 - **pdf.js 固定在 4.10.38**：pdfjs-dist 6.x 依赖 `Uint8Array.prototype.toHex`、`Map.prototype.getOrInsertComputed` 等 Chromium 150+ 的新 API，在较旧内核上会报 `hashOriginal.toHex is not a function`。4.10 覆盖 `getDocument / getPage / render / getTextContent` 全部所用接口，功能一致。
 - **语言包精简**：`electronLanguages: ["zh-CN", "en-US"]` 将 Electron 内置的 55 个 locale 砍到 2 个。

@@ -235,7 +235,8 @@ export function createTextReader({ mount, stage, annStore, onProgress, onChapter
       }
       return `第 ${Math.min(total, leaf + 1)} / ${total} 页`;
     }
-    return `第 ${state.pageIndex + 1} / ${state.pageCount} 页`;
+    // 全书索引还在逐章测量：先不报页码，免得先给一个本章的、稍后又跳成全书页码
+    return '—';
   }
 
   function emitProgress() {
@@ -608,6 +609,7 @@ export function createTextReader({ mount, stage, annStore, onProgress, onChapter
       }
     },
     onTurn(dir) { turnPage(dir); },
+    // 鼠标单击不翻页（划词标注时极易误触），翻页只走边缘按钮 / 键盘
     onLongPress,
     onLongPressMove,
     onLongPressEnd,

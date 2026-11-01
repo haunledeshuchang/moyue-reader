@@ -237,7 +237,12 @@ let pendingSelection = null;
 const selToolbar = createSelectionToolbar({
   onApplyColor: (color, ctx) => commitAnnotation(ctx, color, ''),
   onAnnotate: (color, note, ctx) => commitAnnotation(ctx, color, note),
+  // 点「×」关闭时连选区一起清掉，否则文字一直蓝着、还挡住后续点击
+  onClose: () => { state.renderer?.clearSelection?.(); pendingSelection = null; },
 });
+// EPUB 内容在 iframe 里，父文档收不到点击；由渲染器把 iframe 内的
+// pointerdown 转发过来，实现「点书页任意处即收起标注条」
+window.__moyueSelToolbar = selToolbar;
 
 function handleSelection(ctx) {
   pendingSelection = ctx;
@@ -460,7 +465,7 @@ async function exportAnnotations() {
 // ---------- 翻页箭头（WPS 风格：贴边浮现） ----------
 const arrowPrev = $('#arrowPrev');
 const arrowNext = $('#arrowNext');
-let arrowHideTimer = null;
+const ARROW_EDGE = 168;
 
 // 同时支持两种调用：
 //  - 主文档 mousemove 事件（e 为 MouseEvent，含 clientX/clientY/target）
@@ -475,23 +480,32 @@ function refreshArrows(clientX, clientY, target) {
   if (clientX == null || clientY == null) return;
   const stage = $('#stage').getBoundingClientRect();
   const inStageY = clientY >= stage.top && clientY <= stage.bottom;
-  const nearL = inStageY && clientX >= stage.left && clientX < stage.left + 150;
-  const nearR = inStageY && clientX <= stage.right && clientX > stage.right - 150;
+  // 鼠标离开阅读区（顶栏/侧栏/状态栏）时保持当前状态，避免“刚移过去箭头就没了”
+  if (!inStageY) return;
+  const nearL = clientX >= stage.left && clientX < stage.left + ARROW_EDGE;
+  const nearR = clientX <= stage.right && clientX > stage.right - ARROW_EDGE;
   const onArrow = target?.closest?.('.page-arrow');
-  arrowPrev.classList.toggle('show', nearL || (onArrow === arrowPrev));
-  arrowNext.classList.toggle('show', nearR || (onArrow === arrowNext));
-  clearTimeout(arrowHideTimer);
-  if (nearL || nearR || onArrow) {
-    arrowHideTimer = setTimeout(() => {
-      arrowPrev.classList.remove('show');
-      arrowNext.classList.remove('show');
-    }, 1800);
-  }
+  // 不再按时间自动隐藏：只要鼠标还停在边缘，箭头就一直在 —— 之前 1.8s 自动消失，
+  // 用户看到箭头后稍微犹豫一下就点空了，表现成「点着没反应」
+  arrowPrev.classList.toggle('show', nearL || onArrow === arrowPrev);
+  arrowNext.classList.toggle('show', nearR || onArrow === arrowNext);
 }
 document.addEventListener('mousemove', (e) => refreshArrows(e));
 window.__moyueHover = refreshArrows; // 供 EPUB iframe 内 mousemove 转发调用
-arrowPrev.addEventListener('click', () => state.renderer?.turnPage('prev'));
-arrowNext.addEventListener('click', () => state.renderer?.turnPage('next'));
+// 边缘按钮 = 鼠标唯一的翻页入口（正文里点哪儿都只选字，不翻页）
+// 点完让按钮失焦，避免后续按空格 / 回车又顺带触发它一次
+arrowPrev.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  state.renderer?.turnPage('prev');
+});
+arrowNext.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  state.renderer?.turnPage('next');
+});
+// 在按钮上按下不要开始划词 / 拖拽
+for (const a of [arrowPrev, arrowNext]) {
+  a.addEventListener('pointerdown', (e) => e.preventDefault());
+}
 
 // ---------- MOBI 分章 ----------
 // 章节标题识别：结构化 h1-h3，或文本匹配章节模式的 P/FONT 标签
@@ -612,7 +626,8 @@ async function init() {
         if (e.ctrlKey || e.metaKey) { e.preventDefault(); addBookmark(); }
         break;
       case 'Escape':
-        if (!$('#typePanel').hidden) { $('#typePanel').hidden = true; }
+        if (selToolbar.isVisible()) { selToolbar.dismiss(); }
+        else if (!$('#typePanel').hidden) { $('#typePanel').hidden = true; }
         else if (!$('#hlPalette').hidden) { toggleHlPalette(false); }
         else if (!$('#annPanel').classList.contains('hidden')) { toggleAnnPanel(false); }
         else if (state.tocOpen) toggleSidePanel(false);

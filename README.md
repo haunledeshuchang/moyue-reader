@@ -31,11 +31,12 @@ It is a single-purpose, offline Windows app. No account, no sync, no telemetry, 
 
 - **Two-page spreads, geometrically centred.** The text column is exactly as far from the gutter as it is from the outer page edge (measured: 140 px / 140 px in a 1904 px window). The empty margins on both sides are the point — that's where annotations live.
 - **A page number for the whole book.** `Page 35 / 212`, not `chapter 3, page 2`. It advances by exactly 1 per turn and stays stable when you change font size, page mode, or window width.
-- **The pointer belongs to text selection, not page turning.** Mouse drag / trackpad swipe paging is deliberately removed — it constantly misfired while highlighting. Paging is keyboard `←`/`→` or the hover arrows at the screen edges.
+- **The pointer belongs to text selection. Only the edge arrows page.** Mouse drag, trackpad swipe and *any* click on the text area are deliberately non-paging: highlighting a passage means dragging across it, and every accidental turn threw the selection away. Paging is therefore keyboard `←`/`→` and the two hover arrows at the screen edges (each a 64 × 148 px hit target, so a click never lands in the gap). Double-click-to-select-word, links and the text cursor behave exactly as in a browser.
 - **Real book typography.** 2-em first-line indent, 0.26 em paragraph spacing, justified text with `text-justify: inter-character`, `line-break: strict`, `text-spacing-trim` / `text-autospace` for CJK–Latin mixing. EPUB only gets an indent injected when the publisher supplied neither indent nor paragraph spacing.
 - **A hand-written MOBI parser.** No conversion step, no Calibre. PalmDOC LZ77 + HUFF/CDIC, MOBI6 and KF8, EXTH metadata, cover & inline image extraction, DRM detection.
 - **Annotations with three different locators.** CFI for EPUB, in-chapter text offsets for TXT/MOBI, in-page offsets for PDF — all landing in one store, exportable as Markdown.
-- **77 MB to download** (264 MB installed). And it still ships full Chromium 144 typography features — see [Size](#-size-987-mb--77-mb).
+- **Highlights colour the glyphs, not the line.** EPUB paints them with the CSS Custom Highlight API (`::highlight`), so the browser fills the text's own shape: no full-height bar over the leading, no stale rectangles left behind after a page turn or a font-size change. TXT/MOBI/PDF use inline `<mark>`, which hugs the text the same way.
+- **80 MB to download** (264 MB installed). And it still ships full Chromium 144 typography features — see [Size](#-size-987-mb--80-mb).
 
 ## 📚 Supported formats
 
@@ -91,12 +92,20 @@ Three paper themes — **Day** (warm white), **Night** (deep grey), **Eye-care**
 
 ## 📥 Install
 
-Grab the latest build from [**Releases**](https://github.com/haunledeshuchang/moyue-reader/releases/latest):
+Two mirrors, same binaries:
+
+- **Gitee** (fast inside mainland China, no proxy needed) — [Releases](https://gitee.com/huanledeshuchang/moyue-reader/releases/latest)
+- **GitHub** — [Releases](https://github.com/haunledeshuchang/moyue-reader/releases/latest)
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `墨阅MoYue-0.1.1-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
-| Portable | `墨阅MoYue-0.1.1-便携版.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.2-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
+| Portable | `MoYue-0.1.2-portable.exe` | Single executable, no installation |
+
+Direct Gitee links:
+
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-x64.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-portable.exe`
 
 Windows x64. The binaries are unsigned, so SmartScreen may ask you to confirm once (*More info → Run anyway*).
 
@@ -130,7 +139,7 @@ moyue-reader/
 │   │   ├── bookshelf.js        # Grid/list views, cover extraction, search & sort
 │   │   ├── reader.js           # Format routing, shortcuts, progress, annotation glue
 │   │   ├── themes.js           # CSS-variable theme system + font stacks
-│   │   ├── page-turn.js        # Paging gestures: arrows/keyboard + long-press selection
+│   │   ├── page-turn.js        # Paging: edge arrows + keyboard (clicks never page)
 │   │   ├── annotations.js      # 6 colours, three locator schemes, persistence
 │   │   ├── selection-toolbar.js
 │   │   ├── parsers/
@@ -162,11 +171,11 @@ Things that cost days and are worth writing down.
 9. **rAF stalls in background windows.** epub.js drives its layout queue with `requestAnimationFrame`; when the window is hidden Chromium stops emitting frames and paging deadlocks. The renderer falls back to `setTimeout`, and the main process disables background throttling.
 10. **Two-phase page-turn for EPUB.** Slide out for 150 ms → swap the page → slide in for 175 ms, with the seam dropped to 25 % opacity to hide the swap frame. TXT/MOBI use `translate3d` with `cubic-bezier(.22,.61,.36,1)` over 320 ms — measured 16.8 ms average frame time, zero frames over 20 ms.
 
-## 📦 Size: 98.7 MB → 77 MB
+## 📦 Size: 98.7 MB → 80 MB
 
 Electron apps are mostly Chromium, so the levers are limited — but real:
 
-- **Runtime downgrade** Electron 44 → **40** (Chromium 144). Installer 98.7 → 77 MB. `text-spacing-trim`, `text-autospace` and `color-mix` all survive.
+- **Runtime downgrade** Electron 44 → **40** (Chromium 144). Installer 98.7 → 80 MB. `text-spacing-trim`, `text-autospace` and `color-mix` all survive.
 - **Trim what a reader never touches.** `build/afterPack.cjs` deletes `dxcompiler.dll` / `dxil.dll` (25.9 MB of Dawn/WebGPU shader compiler). `vk_swiftshader` (software fallback) and `LICENSES.chromium.html` are kept.
 - **Pin pdf.js to 4.10.38.** pdfjs-dist 6.x needs `Uint8Array.prototype.toHex` and `Map.prototype.getOrInsertComputed` — Chromium 150+ APIs — and dies with `hashOriginal.toHex is not a function` on anything older.
 - **Two locales only:** `electronLanguages: ["zh-CN", "en-US"]` cuts Electron's 55 locale packs down to 2.

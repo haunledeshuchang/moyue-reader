@@ -37,7 +37,7 @@ async function fetchRequest(url, type, withCredentials, headers) {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const raf2 = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-import { colorFill } from '../annotations.js';
+import { colorFill, HL_COLORS } from '../annotations.js';
 import { createPageTurn } from '../page-turn.js';
 
 export async function createEpubReader({ mount, url, position, styles, theme, annStore, onProgress, onToc, onSelection, pageMode = 'dual', turnFx = 'slide' }) {
@@ -117,12 +117,15 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   // 当前模式（须在 relocated 处理前声明，避免 TDZ）
   let curPageMode = pageMode;
   let curTurnFx = turnFx;
+  let destroyed = false;
 
-  // 「每页字符数」采样：按版式签名分桶，版式一变整桶作废（见 layoutKey）
-  let cplKey = '';
-  const cplSamples = [];
-  let cplLocked = 0; // 采样够数后锁定的每栏字符数（避免读着读着总页数变来变去）
-  const chapterBaseCol = new Map(); // spineIndex -> 该章第 1 栏的全书序号（0 起）
+  // 全书页码索引：按当前版式把每个 spine 章节离屏真实排版一遍，量出每章栏数。
+  // （旧实现用「每栏字符数」估算，扉页这种短章会估得离谱，放大字号后重新采样
+  //   又让总页数整本书级地漂移，所以整块换成真实测量。）
+  const bookIdx = { sig: '', offsets: null, total: 0 };
+  let idxBuilding = false;
+  let idxPending = false;
+  let idxTimer = null;
 
   // 窗口尺寸变化时重新分页（保留当前阅读位置），并在宽窄跨越阈值时切换单/双页
   let resizeTimer = null;
@@ -164,7 +167,7 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       rendition.settings.gap = geo.gap;
       if (rendition.manager?.settings) rendition.manager.settings.gap = geo.gap;
     } catch { /* 忽略 */ }
-    layoutKey(); // 版式变了，清掉旧的「每页字符数」采样
+    layoutKey(); // 版式变了，清掉旧的「全书页码索引」
     if (layout && curPageMode !== 'scroll') relayoutAndRestore(cfi).catch(() => {});
     return { W, H, dual, geo };
   }
@@ -277,30 +280,39 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     return len || 0;
   }
 
-  // ---------- 全书总页码 ----------
-  // 目标：左下角显示「第 276 / 556 页」这样的全书页码（而不是本章页码）。
+  // ---------- 全书总页码（真实分页测量） ----------
+  // 目标：左下角显示「第 276 / 556 页」这样的全书页码，且同一版式下恒定、翻一屏 +1。
   //
-  // 注意 epub.js 的 displayed 单位是「栏」而不是「页」：columnWidth 在单/双页下
-  // 相同（都是版心宽），所以同一个章节单页是 26 栏、双页也是 26 栏，
-  // 跨页数 = 栏数 / 2。全书页码必须据此换算，否则双页会显示成单页的两倍。
-  //
-  // 做法：实测当前版式「一栏能排多少字符」→ 估出全书栏数 → 按模式换算成页数；
-  // 当前页用「本章已排栏数 + 全书此前字符数 / 每栏字符数」精确定位。
-  const LOCATION_CHARS = 1200; // 与 book.locations.generate(1200) 的粒度对应
+  // 旧实现按「每栏字符数」估算全书栏数，有三个硬伤：
+  //   ① 扉页 / 版权页这类只有几行的短章，按字符估会算出一整页甚至更多；
+  //   ② 字号一放大就重新采样，总页数整本书级地跳；
+  //   ③ 和 epub.js 自己给的章内栏号（displayed.page）对不齐。
+  // 现在改成：把每个 spine 章节在「当前版式」下离屏真实排一遍（列宽 / 列距 / 字号 /
+  // 行距 / 上下留白都与阅读区完全一致），量出真实栏数并累积成全书索引。
+  // 注意 epub.js 的 displayed 单位是「栏」不是「页」，双页模式一屏 2 栏，
+  // 所以页码 = 栏号 / divisor。
 
-  /** 版式签名：模式 / 视口宽高 / 字号 / 行距任一变化，旧采样即作废 */
-  function layoutKey() {
+  /** 版式签名：模式 / 视口宽高 / 字号 / 行距 / 边距任一变化，旧索引即作废 */
+  function indexSig() {
     const W = Math.round(mount.clientWidth || 0);
     const H = Math.round(mount.clientHeight || 0);
-    const k = [
-      curPageMode,
-      W >= 720 ? 'w' : 'n',
-      W, H,
+    return [
+      curPageMode, W >= 720 ? 'w' : 'n', W, H,
       Math.round((currentStyles.fontSize || 0) * 10),
       Math.round((currentStyles.lineHeight || 0) * 100),
       Math.round(currentStyles.margin || 0),
     ].join('|');
-    if (k !== cplKey) { cplKey = k; cplSamples.length = 0; cplLocked = 0; chapterBaseCol.clear(); }
+  }
+
+  /** 兼容旧调用点：版式变了就把索引标脏，并排一次重建 */
+  function layoutKey() {
+    const k = indexSig();
+    if (bookIdx.sig && bookIdx.sig !== k) {
+      bookIdx.sig = '';
+      bookIdx.offsets = null;
+      bookIdx.total = 0;
+      scheduleIndex(180);
+    }
     return k;
   }
 
@@ -309,124 +321,256 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     return curPageMode === 'dual' && w >= 720;
   }
 
-  function median(arr) {
-    if (!arr.length) return 0;
-    const a = [...arr].sort((x, y) => x - y);
-    return a[Math.floor(a.length / 2)];
+  const divisorNow = () => (isDualNow() ? 2 : 1);
+
+  function indexReady() {
+    return !!(bookIdx.offsets && bookIdx.sig === indexSig() && bookIdx.total > 0);
   }
 
-  /** 每栏可容纳的字符数（同一版式下单/双页一致，因为版心宽相同） */
-  function sampleLeafChars(loc) {
-    // 滚动模式没有「栏」的概念，采样会得出天文数字，必须排除
-    if (curPageMode === 'scroll') return;
-    layoutKey();
-    const d = loc?.start?.displayed;
-    if (!d || !d.total) return;
-    const doc = rendition.getContents?.()[0]?.document;
-    const chars = doc?.body ? (doc.body.textContent || '').replace(/\s+/g, '').length : 0;
-    const cpl = chars / d.total;
-    // 合理的每栏字符数区间，挡掉测量未完成（cpl 极小/极大）的脏样本
-    if (chars > 300 && cpl > 60 && cpl < 8000) {
-      cplSamples.push(cpl);
-      if (cplSamples.length > 9) cplSamples.shift();
-      // 攒到 3 个有效样本就锁定：不同章节的密度（标题、插图、对话页）差别不小，
-      // 若让采样一直参与中位数，总页数会在阅读过程中来回跳，观感很差
-      if (!cplLocked && cplSamples.length >= 3) cplLocked = median(cplSamples);
+  function scheduleIndex(delay = 100) {
+    clearTimeout(idxTimer);
+    idxTimer = setTimeout(() => { buildBookIndex().catch(() => {}); }, delay);
+  }
+
+  /** 等图片加载完再量（未加载的 img 高度为 0，会把含图章节的页数算少） */
+  function waitImages(imgs, timeout) {
+    const pending = [...imgs].filter((im) => !im.complete);
+    if (!pending.length) return Promise.resolve();
+    return Promise.race([
+      Promise.all(pending.map((im) => new Promise((r) => {
+        im.addEventListener('load', r, { once: true });
+        im.addEventListener('error', r, { once: true });
+      }))),
+      wait(timeout),
+    ]);
+  }
+
+  // 章节样式表缓存：一本书里几十章往往共用同一套 CSS，读一次就够
+  const cssCache = new Map();
+  async function collectCss(section, sdoc) {
+    const parts = [];
+    for (const link of sdoc.querySelectorAll('link[href]')) {
+      const rel = (link.getAttribute('rel') || '').toLowerCase();
+      const type = (link.getAttribute('type') || '').toLowerCase();
+      if (!rel.includes('stylesheet') && !type.includes('css')) continue;
+      let abs = link.getAttribute('href');
+      try { abs = new URL(abs, section.url || location.href).href; } catch { /* 用原值 */ }
+      if (!cssCache.has(abs)) {
+        try {
+          const res = await fetch(abs);
+          cssCache.set(abs, res.ok ? await res.text() : '');
+        } catch { cssCache.set(abs, ''); }
+      }
+      const css = cssCache.get(abs);
+      if (css) parts.push(css);
     }
+    for (const st of sdoc.querySelectorAll('style')) parts.push(st.textContent || '');
+    return parts.join('\n');
   }
 
-  /** 当前的每栏字符数估计（锁定后不再变） */
-  function perColNow() {
-    return cplLocked || median(cplSamples);
+  async function buildBookIndex() {
+    if (curPageMode === 'scroll' || destroyed) return;
+    if (idxBuilding) { idxPending = true; return; }
+    const W = Math.round(mount.clientWidth || 0);
+    const H = Math.round(mount.clientHeight || 0);
+    if (W < 40 || H < 40) return;
+    const sig = indexSig();
+    if (bookIdx.sig === sig && bookIdx.offsets) return;
+    if (!book.spine?.length) return;
+
+    idxBuilding = true;
+    const dual = curPageMode === 'dual' && W >= 720;
+    const geo = geomFor(dual, W);
+    const divisor = dual ? 2 : 1;
+    const vp = vpadOf();
+    const contentH = Math.max(120, H - 2 * vp);
+    const fs = currentStyles.fontSize || 18;
+    const lh = currentStyles.lineHeight || 1.8;
+    const fam = currentStyles.fontFamily || 'serif';
+    const per = geo.colW + geo.gap;
+    const padX = Math.round(geo.gap / 2);
+
+    // 必须用离屏 iframe 而不是普通 div 来测量：
+    // 章节的排版规则写在外部 stylesheet.css 里（首行缩进 / 段距 / 标题字号…），
+    // 塞进主文档的 div 完全拿不到这些规则，实测会少算 30% 的页数。
+    // iframe 里内联同一套 CSS、同样的列宽/列距/字号/行高，量出来的才是真页数。
+    const measureCss = `
+      html, body { margin:0 !important; background:transparent !important; }
+      body {
+        width:${geo.stageW}px !important; height:${contentH}px !important;
+        box-sizing:border-box !important; padding:0 ${padX}px !important;
+        column-width:${geo.colW}px !important; column-gap:${geo.gap}px !important;
+        column-fill:auto !important; overflow:hidden !important;
+        text-align:justify !important; text-spacing-trim:space-first; text-autospace:normal;
+        font-family:${fam} !important; line-height:${lh} !important; font-size:${fs}px;
+      }
+      img { max-width:100% !important; height:auto !important; }
+    `;
+
+    const mf = document.createElement('iframe');
+    mf.setAttribute('aria-hidden', 'true');
+    mf.style.cssText = `position:absolute;left:-30000px;top:0;border:0;visibility:hidden;pointer-events:none;width:${geo.stageW}px;height:${contentH}px;`;
+    mount.appendChild(mf);
+
+    const offsets = [0];
+    let acc = 0;
+    let mark = performance.now();
+    let aborted = false;
+
+    try {
+      for (let i = 0; i < book.spine.length; i++) {
+        if (destroyed || indexSig() !== sig) { aborted = true; break; }
+        const section = book.spine.get(i);
+        let cols = 1;
+        try {
+          const contents = await section.load(book.load.bind(book));
+          const sdoc = contents?.ownerDocument || contents;
+          const css = await collectCss(section, sdoc);
+          const clone = sdoc.documentElement.cloneNode(true);
+          for (const l of [...clone.querySelectorAll('link')]) {
+            if ((l.getAttribute('rel') || '').toLowerCase().includes('stylesheet')) l.remove();
+          }
+          const srcBody = clone.querySelector('body');
+
+          const mdoc = mf.contentDocument;
+          mdoc.open();
+          mdoc.write('<!DOCTYPE html><html><head></head><body></body></html>');
+          mdoc.close();
+          const base = mdoc.createElement('base');
+          base.setAttribute('href', section.url || '');
+          mdoc.head.appendChild(base);
+          const st = mdoc.createElement('style');
+          st.textContent = `${css}\n${measureCss}`;
+          mdoc.head.appendChild(st);
+          if (srcBody) {
+            if (srcBody.className) mdoc.body.className = srcBody.className;
+            mdoc.body.innerHTML = srcBody.innerHTML;
+          } else {
+            mdoc.body.innerHTML = clone.innerHTML;
+          }
+
+          const imgs = mdoc.querySelectorAll('img');
+          if (imgs.length) await waitImages(imgs, 260);
+
+          // body 的 scrollWidth 含左内边距，减掉才是纯内容宽
+          const innerW = mdoc.body.scrollWidth - padX;
+          cols = Math.max(1, Math.round((innerW + geo.gap) / per));
+        } catch { cols = 1; }
+
+        // 双页一屏 2 栏：屏数向上取整（末屏可能只排 1 栏），页码按「屏」累计
+        const screens = Math.max(1, Math.ceil(cols / divisor));
+        acc += screens;
+        offsets.push(acc);
+
+        // 时间片让位：大书有上百章，一次测完会卡住翻页
+        if (performance.now() - mark > 14) {
+          await wait(0);
+          mark = performance.now();
+          if (destroyed || indexSig() !== sig) { aborted = true; break; }
+        }
+      }
+    } finally {
+      mf.remove();
+      idxBuilding = false;
+    }
+
+    if (destroyed) return;
+    if (aborted || indexSig() !== sig) {
+      idxPending = true;
+    } else {
+      bookIdx.sig = sig;
+      bookIdx.offsets = offsets;
+      bookIdx.total = Math.max(1, acc);
+      refreshProgress();
+    }
+    if (idxPending) { idxPending = false; scheduleIndex(120); }
+  }
+
+  /** 当前舞台宽度＝翻页步长（双页是一整屏，单页是版心宽） */
+  function stageWidthNow() {
+    const W = Math.round(mount.clientWidth || 0);
+    if (curPageMode === 'scroll' || W < 40) return Math.max(1, W);
+    return Math.max(1, geomFor(isDualNow(), W).stageW);
   }
 
   /**
-   * 算出「当前栏」在全书中的序号（0 起）。
+   * 当前页（1 起）。
    *
-   * 不能直接用 locations 索引：它是 1200 字符一格的粗粒度，一格跨 2~3 栏，
-   * 每翻一页索引就跳 3，页码会变成 +2/+3。
-   * 也不能只用 chapter 内的 displayed.page：那是章节相对的。
-   *
-   * 所以要「章节基准栏 + 章内栏号」：第一次进入某章时，用 locations 索引反推
-   * 该章第 1 栏在全书的位置并缓存；此后每次翻页只让章内栏号 +1（双页 +2），
-   * 页码就严格 +1 了。
+   * 这里刻意不用 epub.js 的 displayed.page：它的章内总栏数是按 spreadWidth 向上取整
+   * 算的（scrollWidth 还带 padding），比真实栏数多出 1~2 屏；滚到内容末尾之后
+   * 页码还会继续 +1，而画面已经不动了 —— 用户看到的就是「页码乱跳 + 点了没反应」。
+   * 真实滚动位置才是唯一可靠的事实来源。
    */
-  function columnIndexOf(loc, pct, perCol, totalCols) {
-    const d = loc?.start?.displayed;
+  function currentPageNumber(loc) {
+    if (!indexReady()) return 0;
     const spineIdx = loc?.start?.index ?? 0;
-    if (!d || !d.page) return Math.max(0, Math.round(pct * totalCols) || 0);
-    const page = d.page;
-    if (!chapterBaseCol.has(spineIdx)) {
-      let locIdx = null;
-      try { locIdx = book.locations.locationFromCfi(loc.start.cfi); } catch { /* 忽略 */ }
-      let base;
-      if (Number.isFinite(locIdx) && perCol) {
-        base = Math.round((locIdx * LOCATION_CHARS) / perCol) - (page - 1);
-      } else {
-        base = Math.round(pct * totalCols) - (page - 1);
-      }
-      // 基准必须随章节单调不减，防止某次估偏导致页码倒退
-      for (const [k, v] of chapterBaseCol) if (k < spineIdx && v > base) base = v;
-      chapterBaseCol.set(spineIdx, Math.max(0, base));
-    }
-    return chapterBaseCol.get(spineIdx) + (page - 1);
+    const off = bookIdx.offsets[Math.min(spineIdx, bookIdx.offsets.length - 1)] || 0;
+    const nextOff = spineIdx + 1 < bookIdx.offsets.length ? bookIdx.offsets[spineIdx + 1] : bookIdx.total;
+    const screens = Math.max(1, nextOff - off);
+    let sl = 0;
+    try { sl = rendition.manager?.container?.scrollLeft || 0; } catch { sl = 0; }
+    const delta = stageWidthNow();
+    const s = Math.max(0, Math.min(screens - 1, Math.round(sl / delta)));
+    return Math.max(1, Math.min(bookIdx.total, off + s + 1));
   }
 
-  function globalLabel(loc, pct) {
-    if (!locationsReady) return null;
-    layoutKey();
-    const perCol = perColNow(); // 每栏字符数
-    const totalChars = locTotal() * LOCATION_CHARS;
-    if (!perCol || !totalChars) return null;
-
-    const perPage = isDualNow() ? 2 : 1; // 一个跨页含 2 栏
-    const totalCols = totalChars / perCol;
-    const total = Math.max(1, Math.round(totalCols / perPage));
-    const col = columnIndexOf(loc, pct, perCol, totalCols);
-    const cur = Math.max(1, Math.min(total, Math.floor(col / perPage) + 1));
-    return `第 ${cur} / ${total} 页`;
+  function totalPageNumber() {
+    if (!indexReady()) return 0;
+    return Math.max(1, bookIdx.total);
   }
 
-  function pageLabelFromLoc(loc, pct) {
+  function pageLabelFromLoc(loc) {
     // 滚动模式没有「页」的概念，跟文本渲染器保持一致
     if (curPageMode === 'scroll') return '滚动';
-    const g = globalLabel(loc, pct);
-    if (g) return g;
-    // 兜底：索引未就绪时显示本章页码
-    const d = loc?.start?.displayed;
-    if (d && d.total) return `第 ${d.page} / ${d.total} 页`;
-    const total = locTotal();
-    const cur = total ? Math.max(1, Math.min(total, Math.round(pct * total))) : 0;
-    return total ? `第 ${cur} / ${total} 页` : '—';
+    const total = totalPageNumber();
+    const cur = currentPageNumber(loc);
+    if (total && cur) return `第 ${Math.min(total, cur)} / ${total} 页`;
+    // 索引还在算：先不显示页码，免得先给一个错的、稍后又跳
+    return '—';
   }
 
   rendition.on('relocated', (loc) => {
     const cfi = loc.start.cfi;
     lastCfi = cfi;
-    sampleLeafChars(loc);
     const pct = percentFromCfi(cfi);
     onProgress?.({
       cfi,
       percent: pct,
       chapterTitle: currentChapterTitle(),
-      pageLabel: pageLabelFromLoc(loc, pct),
+      pageLabel: pageLabelFromLoc(loc),
       locator: { cfi },
       spineIndex: loc.start.index,
     });
+    prefetchNeighbor(loc.start.index);
   });
 
-  /** locations 生成完成后页码才能算全书（否则只有本章页码），完成时刷新一次 */
+  /**
+   * 预取邻章：epub.js 换章时是 clear() + append() 重建 iframe，
+   * 章节没缓存时这一步要好几百毫秒，期间翻页锁没释放，表现成「点了没反应」。
+   */
+  const prefetched = new Set();
+  function prefetchNeighbor(index) {
+    if (curPageMode === 'scroll') return;
+    for (const i of [index + 1, index - 1]) {
+      if (i < 0 || i >= book.spine.length || prefetched.has(i)) continue;
+      const section = book.spine.get(i);
+      if (!section) continue;
+      prefetched.add(i);
+      try { section.load(book.load.bind(book)).catch(() => {}); } catch { /* 忽略 */ }
+    }
+  }
+
+  /** locations 建好后刷新一次（百分比进度依赖它） */
   function refreshProgress() {
     try {
       const loc = rendition.currentLocation();
       if (!loc?.start?.cfi) return;
-      sampleLeafChars(loc);
       const pct = percentFromCfi(loc.start.cfi);
       onProgress?.({
         cfi: loc.start.cfi,
         percent: pct,
         chapterTitle: currentChapterTitle(),
-        pageLabel: pageLabelFromLoc(loc, pct),
+        pageLabel: pageLabelFromLoc(loc),
         locator: { cfi: loc.start.cfi },
         spineIndex: loc.start.index,
       });
@@ -484,8 +628,13 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   // 双页模式：显示中缝书脊
   window.__moyueSetDual?.(wantDual);
 
+  // 首屏出来之后再统计全书页码（后台分片跑，不挡阅读）
+  scheduleIndex(60);
+
   // ---------- 翻页：iframe 跟手 + 链条动画 ----------
   let turning = false;
+  let pendingDir = null;
+  let turnGuard = null;
 
   function iframeEl() { return mount.querySelector('iframe'); }
 
@@ -494,6 +643,22 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       const loc = rendition.currentLocation();
       return dir === 'next' ? !!loc?.atEnd : !!loc?.atStart;
     } catch { return false; }
+  }
+
+  /**
+   * 章节未缓存时 rendition.next() 要 clear() + append() 重建 iframe，
+   * 队列里的 promise 可能几百毫秒、甚至更久才 resolve。以前这里直接 await，
+   * turning 锁就一直不释放，用户连点箭头全部被丢弃 —— 表现就是「点着没反应」。
+   * 现在：给导航一个硬上限，超时也继续走完流程，锁必定释放。
+   */
+  const NAV_TIMEOUT = 1600;
+  function nav(dir) {
+    let p;
+    try { p = dir === 'next' ? rendition.next() : rendition.prev(); } catch { return Promise.resolve(false); }
+    return Promise.race([
+      Promise.resolve(p).then(() => true).catch(() => false),
+      wait(NAV_TIMEOUT).then(() => false),
+    ]);
   }
 
   // ---------- 翻页动画 ----------
@@ -505,9 +670,12 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   const EASE_IN = 'cubic-bezier(.12,.52,.28,1)';
 
   async function animatedTurn(dir) {
-    if (turning) return;
+    // 连点时不再默默丢弃：记住最后一次方向，本页翻完立刻接上
+    if (turning) { pendingDir = dir; return; }
     if (currentAt(dir)) return;
     turning = true;
+    clearTimeout(turnGuard);
+    turnGuard = setTimeout(() => { turning = false; }, NAV_TIMEOUT + 1500);
     try {
       const w = mount.clientWidth || 800;
       const travel = Math.max(220, Math.round(w * 0.55));
@@ -515,7 +683,7 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       let iframe = iframeEl();
 
       if (curTurnFx === 'none') {
-        try { await (dir === 'next' ? rendition.next() : rendition.prev()); } catch { /* 忽略 */ }
+        await nav(dir);
         iframe = iframeEl();
         if (iframe) { iframe.style.transition = 'none'; iframe.style.transform = 'translate3d(0,0,0)'; iframe.style.opacity = '1'; iframe.style.boxShadow = ''; }
         return;
@@ -524,7 +692,7 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       if (curTurnFx === 'fade') {
         if (iframe) { iframe.style.transition = 'opacity .15s linear'; iframe.style.opacity = '0'; }
         await wait(155);
-        try { await (dir === 'next' ? rendition.next() : rendition.prev()); } catch { /* 忽略 */ }
+        await nav(dir);
         iframe = iframeEl();
         if (iframe) {
           iframe.style.transition = 'none';
@@ -549,7 +717,7 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
           : '14px 0 32px rgba(0,0,0,.24)';
       }
       await wait(TURN_OUT);
-      try { await (dir === 'next' ? rendition.next() : rendition.prev()); } catch { /* 忽略 */ }
+      await nav(dir);
       iframe = iframeEl();
       if (iframe) {
         iframe.style.transition = 'none';
@@ -564,7 +732,11 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       iframe = iframeEl();
       if (iframe) { iframe.style.boxShadow = ''; iframe.style.willChange = ''; }
     } finally {
+      clearTimeout(turnGuard);
       turning = false;
+      const queued = pendingDir;
+      pendingDir = null;
+      if (queued) setTimeout(() => { animatedTurn(queued).catch(() => {}); }, 30);
     }
   }
 
@@ -626,7 +798,9 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     // iframe 的 mouseup 由 epub.js 原生 'selected' 事件接管，自动弹标注工具栏
   }
 
-  // ---------- 翻页手势引擎（只负责长按选词与箭头浮现，不再接管拖拽翻页） ----------
+  // ---------- 翻页手势引擎（长按选词 / 箭头浮现） ----------
+  // 注意：这里**不传 onTap / onRightClick** —— 鼠标在书页上单击不再翻页，
+  // 否则划词标注时手一抖就翻页、选区也跟着丢。翻页只走边缘按钮 / 键盘 / turnPage()。
   const engine = createPageTurn({
     viewport: mount,
     canGo: (dir) => !currentAt(dir),
@@ -679,24 +853,106 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
 
   const attachEngine = () => {
     for (const c of rendition.getContents()) {
-      if (c?.document) engine.attachDocument(c.document);
+      const doc = c?.document;
+      if (!doc) continue;
+      engine.attachDocument(doc);
+      // 标注工具条在父文档，iframe 内的点击传不出去 → 之前「点正文根本关不掉」。
+      // 这里在 iframe 文档里兜一层：点书页任意处即收起工具条。
+      if (!doc.__moyuePopHook) {
+        doc.__moyuePopHook = true;
+        doc.addEventListener('pointerdown', () => {
+          try { window.__moyueSelToolbar?.onOutsidePointerDown?.(); } catch { /* 忽略 */ }
+        }, true);
+      }
     }
     tuneTypography();
+    // 每节渲染完成后重新登记一次高亮（新文档 = 新的 CSS.highlights 集合）
+    paintHighlights();
   };
   rendition.on('rendered', attachEngine);
   rendition.on('displayed', attachEngine);
   attachEngine();
 
   // ---------- 标注（高亮 / 批注） ----------
-  async function applyStoredAnnotations() {
-    const anns = await annStore.load();
-    for (const a of anns) {
-      if (a.loc?.cfi) applyAnnotation(a);
+  // 荧光笔改用 CSS Highlight API（::highlight）绘制，不再用 epub.js 的 SVG 覆盖层。
+  // 原因是 SVG 覆盖层有三个治不好的毛病，正好就是「标完一片颜色糊出去」：
+  //   ① 它是按行盒（line box）画矩形的，行距 2 倍时矩形高 28px 而字只有 14px，
+  //      上下各糊出 7px，挨着的两行会连成一整条色带；
+  //   ② 矩形只用 range.getClientRects() 的天生宽度，两侧没有收缩余量，紧贴相邻列；
+  //   ③ 坐标只在「创建那一刻」算一次，之后翻页 / 改字号 / 开关目录导致重排，
+  //      覆盖层不会重算，颜色就僵在原地，压到别的文字上。
+  // ::highlight 由浏览器自己绘制，只填文字字形所占的区域，重排后自动跟随，
+  // 天生满足「只有文字被标上颜色」。
+
+  function hlSupported(win) {
+    return !!(win && win.CSS && win.CSS.highlights && win.Highlight);
+  }
+
+  // 用函数而不是常量：attachEngine() 会在模块初始化阶段就调用 paintHighlights()，
+  // 那时下面的 const 还在 TDZ 里，取常量会直接抛错。
+  function hlStyleCss() {
+    return HL_COLORS.map((c) => `::highlight(moyue-hl-${c.key}){background-color:${c.fill};}`).join('\n');
+  }
+
+  /** 每节文档各注入一份 ::highlight 样式（样式作用域在各自的 document 里） */
+  function ensureHlStyle(doc) {
+    if (!doc || doc.__moyueHlStyle) return;
+    doc.__moyueHlStyle = true;
+    const st = doc.createElement('style');
+    st.id = 'moyue-hl-style';
+    st.textContent = hlStyleCss();
+    (doc.head || doc.documentElement).appendChild(st);
+  }
+
+  /** 从 CFI 反推 spine 序号：epubcfi(/6/18[chap]!/...) → 8 */
+  function spineOfCfi(cfi) {
+    const m = /^epubcfi\(\/6\/(\d+)/.exec(String(cfi || ''));
+    return m ? Math.round(parseInt(m[1], 10) / 2) - 1 : -1;
+  }
+
+  /** 把当前显示的每一节里的标注重新登记成 Range（重排后浏览器自动重新上色） */
+  function paintHighlights() {
+    let all = [];
+    try { all = annStore.all() || []; } catch { all = []; }
+    for (const c of rendition.getContents()) {
+      const win = c?.document?.defaultView;
+      const doc = c?.document;
+      if (!doc || !hlSupported(win)) continue;
+      ensureHlStyle(doc);
+      const groups = new Map();
+      for (const a of all) {
+        const cfi = a?.loc?.cfi;
+        if (!cfi) continue;
+        if (spineOfCfi(cfi) !== c.sectionIndex) continue;
+        try {
+          const r = c.range(cfi);
+          if (!r || r.collapsed) continue;
+          const key = a.color && HL_COLORS.some((x) => x.key === a.color) ? a.color : 'yellow';
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(r);
+        } catch { /* CFI 失效时静默跳过 */ }
+      }
+      for (const col of HL_COLORS) {
+        const name = 'moyue-hl-' + col.key;
+        const list = groups.get(col.key);
+        if (list && list.length) {
+          win.CSS.highlights.set(name, new win.Highlight(...list));
+        } else {
+          win.CSS.highlights.delete(name);
+        }
+      }
     }
   }
 
+  async function applyStoredAnnotations() {
+    await annStore.load();
+    paintHighlights();
+  }
+
   function applyAnnotation(ann) {
-    if (!ann.loc?.cfi) return;
+    if (!ann?.loc?.cfi) return;
+    if (hlSupported(window)) { paintHighlights(); return; }
+    // 老内核没有 Highlight API 时的退路（Electron 40 用不到，留着兜底）
     try {
       rendition.annotations.highlight(
         ann.loc.cfi,
@@ -709,7 +965,8 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   }
 
   function removeAnnotation(ann) {
-    if (!ann.loc?.cfi) return;
+    if (!ann?.loc?.cfi) return;
+    if (hlSupported(window)) { paintHighlights(); return; }
     try { rendition.annotations.remove(ann.loc.cfi, 'highlight'); } catch { /* 忽略 */ }
   }
 
@@ -819,6 +1076,9 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
       iframeEl()?.contentWindow?.getSelection()?.removeAllRanges();
     },
     destroy() {
+      destroyed = true;
+      clearTimeout(idxTimer);
+      clearTimeout(turnGuard);
       window.removeEventListener('resize', onWinResize);
       try { ro?.disconnect(); } catch { /* 忽略 */ }
       clearTimeout(resizeTimer);

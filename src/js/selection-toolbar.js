@@ -1,10 +1,13 @@
 /**
  * 墨阅 MoYue — 选中标注工具栏
  * 选中文本后浮现：六色荧光笔 + 批注入口 + 批注编辑（仿 Word 边注体验）
+ * 2026-11：新增显式关闭按钮 —— 选中后若不想标注，可一键关掉（并清掉选区），
+ *          不再只能靠「点空白处」（EPUB 内容在 iframe 里，点正文根本关不掉）。
  */
+
 import { HL_COLORS } from './annotations.js';
 
-export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
+export function createSelectionToolbar({ onApplyColor, onAnnotate, onClose }) {
   let currentColor = 'yellow';
   let activeCtx = null;
 
@@ -12,7 +15,7 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
   pop.className = 'sel-pop';
   pop.hidden = true;
 
-  // ---------- 主条：颜色 + 批注 ----------
+  // ---------- 主条：颜色 + 批注 + 关闭 ----------
   const bar = document.createElement('div');
   bar.className = 'sel-bar';
 
@@ -44,9 +47,22 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
     if (!noteSection.hidden) {
       position(activeCtx);
       requestAnimationFrame(() => noteInput.focus());
+    } else {
+      position(activeCtx);
     }
   });
   bar.appendChild(noteBtn);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'sel-close';
+  closeBtn.title = '关闭（Esc）';
+  closeBtn.setAttribute('aria-label', '关闭标注工具栏');
+  closeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dismiss();
+  });
+  bar.appendChild(closeBtn);
   pop.appendChild(bar);
 
   // ---------- 批注编辑区 ----------
@@ -65,7 +81,7 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'sel-note-cancel';
   cancelBtn.textContent = '取消';
-  cancelBtn.addEventListener('click', () => { noteSection.hidden = true; });
+  cancelBtn.addEventListener('click', () => { noteSection.hidden = true; position(activeCtx); });
   const saveBtn = document.createElement('button');
   saveBtn.className = 'sel-note-save';
   saveBtn.textContent = '保存批注';
@@ -77,7 +93,7 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
 
   noteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNote(); }
-    if (e.key === 'Escape') { e.stopPropagation(); noteSection.hidden = true; }
+    if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); dismiss(); }
   });
 
   function saveNote() {
@@ -106,6 +122,7 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
     left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
     let top = r.top - h - 10;
     if (top < 56) top = r.top + (r.height || 0) + 10;
+    if (top + h > window.innerHeight - 8) top = Math.max(56, window.innerHeight - h - 8);
     pop.style.left = left + 'px';
     pop.style.top = top + 'px';
   }
@@ -117,18 +134,35 @@ export function createSelectionToolbar({ onApplyColor, onAnnotate }) {
     noteInput.value = '';
     position(ctx);
   }
+
+  /** 收起但保留选区（用于「点了别处」这类温和关闭） */
   function hide() {
     pop.hidden = true;
+    noteSection.hidden = true;
     activeCtx = null;
   }
 
-  // 点击外部关闭
+  /** 用户主动关闭：收起并清掉选区，避免文字一直蓝着 */
+  function dismiss() {
+    hide();
+    try { onClose?.(); } catch { /* 忽略 */ }
+  }
+
+  // 点击外部关闭（主文档；EPUB 的 iframe 由渲染器转发进来）
   document.addEventListener('pointerdown', (e) => {
     if (pop.hidden) return;
-    if (!pop.contains(e.target)) hide();
+    if (pop.contains(e.target)) return;
+    hide();
   }, true);
 
   document.body.appendChild(pop);
 
-  return { show, hide, isVisible: () => !pop.hidden };
+  return {
+    show,
+    hide,
+    dismiss,
+    isVisible: () => !pop.hidden,
+    /** 供 iframe 内的 pointerdown 调用：点书页即收起（不清选区，选字过程还要用） */
+    onOutsidePointerDown() { if (!pop.hidden) hide(); },
+  };
 }

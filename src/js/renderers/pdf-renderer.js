@@ -281,6 +281,10 @@ export async function createPdfReader({ mount, url, position, annStore, onProgre
     }, 10);
   });
 
+  // ---------- 鼠标单击翻页（左键分区 / 右键上一页） ----------
+  // 注意：PDF 不做「点击翻页」。以前左键点右半页 / 右键上一页，选字时手一抖就翻页，
+  // 选中的文字也跟着没了。翻页只走屏幕边缘的翻页按钮和键盘 ← →。
+
   // ---------- 大纲 ----------
   async function loadOutline() {
     const tree = await doc.getOutline().catch(() => null);

@@ -201,25 +201,39 @@ body {
 /* 荧光笔高亮 */
 mark.hl { color: inherit; border-radius: 2px; transition: background .2s; }
 
-/* ---------- 翻页箭头（WPS 风格） ---------- */
+/* ---------- 翻页箭头（WPS 风格，现在是鼠标唯一的翻页入口） ---------- */
+/* 按钮本体做成「隐形的大命中区」（64×148），视觉只有中间那颗 44px 圆钮。
+   以前按钮就是 42px 的圆，鼠标稍微偏几像素就点空，手感像「点了没反应」。 */
 .page-arrow {
-  position: absolute; top: 50%; transform: translateY(-50%) scale(.88);
-  width: 42px; height: 42px; border-radius: 50%;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
-  color: var(--text-2);
+  position: absolute; top: 50%;
+  transform: translateY(-50%);
+  width: 64px; height: 148px;
+  padding: 0; border: 0; background: transparent;
   display: grid; place-items: center;
   opacity: 0; pointer-events: none;
-  transition: opacity .22s, transform .22s var(--ease-spring), background .15s, color .15s;
-  z-index: 12; cursor: pointer;
-  box-shadow: var(--shadow);
+  transition: opacity .22s;
+  z-index: 14; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.page-arrow.show { opacity: .92; pointer-events: auto; transform: translateY(-50%) scale(1); }
-.page-arrow.show:hover { opacity: 1; transform: translateY(-50%) scale(1.12); color: var(--accent); }
-.page-arrow.show:active { transform: translateY(-50%) scale(.96); }
-.page-arrow.left { left: 12px; }
-.page-arrow.right { right: 12px; }
+.page-arrow::before {
+  content: ''; position: absolute; width: 44px; height: 44px; border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  transition: transform .22s var(--ease-spring), background .15s;
+}
+.page-arrow svg {
+  position: relative; color: var(--text-2);
+  transition: color .15s, transform .22s var(--ease-spring);
+}
+.page-arrow.show { opacity: .95; pointer-events: auto; }
+.page-arrow.show:hover::before { transform: scale(1.1); }
+.page-arrow.show:hover svg { color: var(--accent); }
+.page-arrow.show:active svg { transform: scale(.92); }
+.page-arrow.left { left: 2px; }
+.page-arrow.right { right: 2px; }
 
 /* ---------- 翻页阴影（书页纵深） ---------- */
 .turn-shadow { position: absolute; top: 0; bottom: 0; width: 130px; pointer-events: none; z-index: 11; }
@@ -367,6 +381,17 @@ input[type="range"] { flex: 1; accent-color: var(--accent); }
   transition: background .15s, color .15s;
 }
 .sel-note-btn:hover { background: var(--hover); color: var(--accent); }
+/* 关闭按钮：选中后不想标注时一键收起（并清掉选区） */
+.sel-close {
+  width: 22px; height: 22px; flex-shrink: 0;
+  border: none; border-radius: 50%; padding: 0;
+  background: transparent; color: var(--text-3);
+  display: inline-grid; place-items: center; cursor: pointer;
+  margin-left: 2px;
+  transition: background .15s, color .15s, transform .12s;
+}
+.sel-close:hover { background: var(--hover); color: #c0392b; }
+.sel-close:active { transform: scale(.9); }
 .sel-note {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
