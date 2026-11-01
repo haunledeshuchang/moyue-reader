@@ -99,13 +99,13 @@ Two mirrors, same binaries:
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.2-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
-| Portable | `MoYue-0.1.2-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.3-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
+| Portable | `MoYue-0.1.3-portable.exe` | Single executable, no installation |
 
 Direct Gitee links:
 
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-x64.exe`
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-portable.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-x64.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-portable.exe`
 
 Windows x64. The binaries are unsigned, so SmartScreen may ask you to confirm once (*More info → Run anyway*).
 

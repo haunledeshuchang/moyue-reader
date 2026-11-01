@@ -13,10 +13,15 @@ A local-first, paper-like ebook reader for Windows — no account, no sync, no n
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.2-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
-| Portable | `MoYue-0.1.2-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.3-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
+| Portable | `MoYue-0.1.3-portable.exe` | Single executable, no installation |
 
 Windows x64 · unsigned build, so SmartScreen may ask once (*More info → Run anyway*).
+
+### What changed in 0.1.3
+
+- **New typeface: 华文宋体 / STSong** (the `华宋` button in the 版式 panel). It sits between 宋体 and 黑体 so the reading faces go system → 宋体 → 华宋 → 黑体 → 楷体 → Times. STSong ships with Office and the SinoType family rather than with Windows itself, so the stack falls back to NSimSun/SimSun on machines that do not have it — nothing breaks, you just get the Song face you already had.
+- The 版式 panel is 28 px wider (264 → 292 px) so the sixth font button fits without clipping `Times`.
 
 ### What changed in 0.1.2
 

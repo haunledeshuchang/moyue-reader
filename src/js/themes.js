@@ -64,6 +64,9 @@ export const FONT_FAMILIES = {
   song: '"Noto Serif CJK SC", "Source Han Serif SC", "SimSun", "宋体", serif',
   hei: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
   kai: '"KaiTi", "楷体", "STKaiti", "Noto Serif CJK SC", serif',
+  // 华文宋体（STSong）：随 Office / 华文系列字体安装，Windows 自带的不多，
+  // 所以后面按 macOS 的 STSongti → 宋体 → SimSun 逐级回退，没装的机器也不会掉字
+  stsong: '"STSong", "华文宋体", "STSongti-SC-Regular", "STSongti-SC", "NSimSun", "SimSun", "宋体", serif',
   // 西文衬线（Times New Roman）：拉丁字符优先使用，中文字符自动回退到系统衬线
   times: '"Times New Roman", "NSimSun", "SimSun", "宋体", serif',
 };

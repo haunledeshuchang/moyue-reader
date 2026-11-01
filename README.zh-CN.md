@@ -54,7 +54,7 @@
 - **常驻控制栏**：阅读时顶部的目录 / 主题 / 版式控制栏始终显示，中途不可关闭，随时可调。
 - **彩色标注（6 色荧光笔）**：顶栏荧光笔面板或选中文字浮出的工具栏提供红/橙/黄/绿/蓝/紫六色，对重点句段做高亮，复读时一眼可辨。**颜色只落在字上**——EPUB 用 CSS Highlight API（`::highlight`）绘制，由浏览器按字形填充，不会像矩形覆盖层那样按行盒画出一整条比字还高的色带，也不会在翻页、改字号后错位糊到别处；TXT/MOBI/PDF 用内联 `<mark>`，同样紧贴文字。
 - **阅读批注（仿 Word 边注）**：选中文字后点「批注」，在旁白编辑区写下阅读心得（Ctrl+Enter 保存）。所有标注与批注汇总于右侧抽屉，支持**跳转 / 修改 / 删除**，并可**一键导出 Markdown** 笔记。
-- **版式调节**：字号、行距、字体（系统/宋体/黑体/楷体/**Times New Roman**）、页边距
+- **版式调节**：字号、行距、字体（系统/宋体/华文宋体/黑体/楷体/**Times New Roman**）、页边距
 - **目录导航**：EPUB 完整目录、MOBI/TXT 智能章节识别（支持「第 X 章」「Chapter N」「序/楔子/尾声」等中英文模式）
 - **书签**：Ctrl+B 随时标记，书签面板一键回跳
 - **进度记忆**：每本书独立记忆阅读位置（CFI / 页码 / 滚动比例）+ 标注数据，重开自动恢复
@@ -98,13 +98,13 @@
 
 | 版本 | 文件名 | 说明 |
 |---|---|---|
-| 安装版 | `MoYue-0.1.2-x64.exe` | 双击安装，建桌面与开始菜单快捷方式，关联 epub/pdf/mobi/txt |
-| 便携版 | `MoYue-0.1.2-portable.exe` | 单个 exe，免安装直接运行，可放 U 盘 |
+| 安装版 | `MoYue-0.1.3-x64.exe` | 双击安装，建桌面与开始菜单快捷方式，关联 epub/pdf/mobi/txt |
+| 便携版 | `MoYue-0.1.3-portable.exe` | 单个 exe，免安装直接运行，可放 U 盘 |
 
 Gitee 直链（右键另存／复制到下载工具）：
 
-- 安装版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-x64.exe`
-- 便携版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.2/MoYue-0.1.2-portable.exe`
+- 安装版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-x64.exe`
+- 便携版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-portable.exe`
 
 Windows x64，未签名，SmartScreen 可能提示一次（更多信息 → 仍要运行）。
 

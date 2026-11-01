@@ -308,7 +308,8 @@ mark.hl { color: inherit; border-radius: 2px; transition: background .2s; }
 /* ---------- 版式弹层 ---------- */
 .type-panel {
   position: absolute; top: 52px; right: 12px; z-index: 40;
-  width: 264px; padding: 14px 16px;
+  /* 292px：字体多了一档（华宋），264px 会把 Times 挤到放不下 */
+  width: 292px; padding: 14px 16px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; box-shadow: var(--shadow);
   display: flex; flex-direction: column; gap: 12px;
@@ -323,7 +324,7 @@ mark.hl { color: inherit; border-radius: 2px; transition: background .2s; }
 .seg button {
   flex: 1; border: none; background: transparent; border-radius: 6px;
   padding: 5px 0; font-size: 12px; color: var(--text-2); cursor: pointer; font-family: inherit;
-  transition: all .15s;
+  white-space: nowrap; transition: all .15s;
 }
 .seg button.active { background: var(--surface); color: var(--accent); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 
