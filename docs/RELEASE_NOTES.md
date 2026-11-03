@@ -13,10 +13,17 @@ A local-first, paper-like ebook reader for Windows — no account, no sync, no n
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.3-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
-| Portable | `MoYue-0.1.3-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.4-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
+| Portable | `MoYue-0.1.4-portable.exe` | Single executable, no installation |
 
 Windows x64 · unsigned build, so SmartScreen may ask once (*More info → Run anyway*).
+
+### What changed in 0.1.4
+
+- **Fixed: the font picker did nothing on real books.** Every EPUB that ships its own `font-family` — which is most Chinese trade books — looked identical no matter which face you picked. The font was only written on `body`, and a book's own rule such as `p { font-family: 汉仪旗黑50S }` is a *direct* declaration on the paragraph, so it always beat the value inherited from `body`. The rule now goes down to every text element inside the page (`body, body *`, plus `::before`/`::after`), so 系统 / 宋体 / 华宋 / 黑体 / 楷体 / Times really do re-shape the text on any book. `code`, `pre`, `kbd`, `samp`, `tt` are deliberately left monospaced.
+- **The font is part of the layout signature**, so the whole-book page count is re-measured after a typeface change instead of keeping the previous face's total.
+- **Injected theme rules no longer accumulate.** `epub.js` only appends rules and never clears them, so every font / size / theme change left another copy behind; the previous batch is now dropped first.
+- **The font picker is greyed out for PDFs**, with a tooltip — a PDF carries its glyphs inside the page, so no typeface switch can ever change it, and a button that silently does nothing reads as a bug.
 
 ### What changed in 0.1.3
 

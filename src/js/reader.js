@@ -696,6 +696,12 @@ async function openEpub(book) {
 
 async function openPdf(book) {
   $('#pdfView').hidden = false;
+  // PDF 的字体是嵌在页面里的字形，换字体键对它天然无效。
+  // 与其让人点了以为坏了，不如直接置灰 + 说清楚缘由。
+  const ffSeg = $('#fontFamilySeg');
+  ffSeg.classList.add('disabled');
+  ffSeg.title = 'PDF 的字体由文件自身决定，无法更换';
+  for (const b of ffSeg.children) { b.disabled = true; b.title = 'PDF 的字体由文件自身决定，无法更换'; }
   const renderer = await createPdfReader({
     mount: $('#pdfView'),
     url: moyue.bookUrl(book.id, book.format),

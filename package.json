@@ -1,6 +1,6 @@
 {
   "name": "moyue-reader",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "MoYue (墨阅) — a local-first, paper-like EPUB/PDF/TXT/MOBI reader for Windows with two-page spreads, real book typography and annotations.",
   "main": "main.js",
   "scripts": {

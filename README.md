@@ -63,7 +63,7 @@ Three paper themes — **Day** (warm white), **Night** (deep grey), **Eye-care**
 | Page modes | Single / two-page spread / continuous scroll, switchable any time |
 | Turn effects | Slide (default), fade, none |
 | Margins | Adjustable — the geometry keeps inner and outer margins equal |
-| Typography | Font size, line height, family (system / Song / Hei / Kai / Times New Roman), margin |
+| Typography | Font size, line height, family (system / Song / STSong / Hei / Kai / Times New Roman), margin. The family is **enforced**: a book's own `font-family` on paragraphs is overridden, so the picker always shows. PDFs excepted — their glyphs live inside the page, so the picker is greyed out with a tooltip. |
 | Highlights | 6-colour highlighter from the toolbar or the selection popover |
 | Comments | Word-style marginal notes; all annotations listed in a side drawer, jump / edit / delete, export to Markdown |
 | Bookmarks | `Ctrl+B`, one-click jump back |
@@ -99,13 +99,13 @@ Two mirrors, same binaries:
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.3-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
-| Portable | `MoYue-0.1.3-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.4-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
+| Portable | `MoYue-0.1.4-portable.exe` | Single executable, no installation |
 
 Direct Gitee links:
 
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-x64.exe`
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.3/MoYue-0.1.3-portable.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-x64.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-portable.exe`
 
 Windows x64. The binaries are unsigned, so SmartScreen may ask you to confirm once (*More info → Run anyway*).
 

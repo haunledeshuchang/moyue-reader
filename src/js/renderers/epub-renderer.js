@@ -221,16 +221,26 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     const bg = t.vars['--reader-bg'];
     const fg = t.vars['--reader-text'];
     const accent = t.vars['--accent'];
+    const fam = s.fontFamily;
     return {
       body: {
         background: `${bg} !important`,
         color: `${fg} !important`,
-        'font-family': `${s.fontFamily} !important`,
+        'font-family': `${fam} !important`,
         'line-height': `${s.lineHeight} !important`,
         // 左右留白由 column gap 提供，这里不再叠加，避免双页时中缝被撑开
         padding: '0 !important',
         margin: '0 !important',
         'text-align': 'justify',
+      },
+      // 字体必须下到「每一个文本元素」上，只写 body 会被书内 CSS 的直接声明吃掉：
+      // 实测《cis股票交易术》给 p 写了 font-family:汉仪旗黑50S，而 body 上的
+      // font-family 只是「继承值」，继承永远输给直接声明 → 切字体整本书纹丝不动。
+      'body, body *': { 'font-family': `${fam} !important` },
+      'body *::before, body *::after': { 'font-family': `${fam} !important` },
+      // 代码 / 等宽块保留等宽，不跟着正文拉成宋体
+      'body code, body pre, body kbd, body samp, body tt': {
+        'font-family': 'ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace !important',
       },
       'p, div, li, blockquote, dd, dt': {
         color: `${fg} !important`,
@@ -249,7 +259,20 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     };
   }
 
+  // epub.js 的 addStylesheetRules 只 insertRule 不清旧规则，而 applyTheme 每次
+  // 改字号 / 字体 / 主题都会被调用 → 规则会越堆越多（同选择器重复几十份）。
+  // 每轮先把上次注入的 <style> 清空，保证只留当前一份。
+  function clearThemeCss() {
+    try {
+      for (const c of rendition.getContents()) {
+        const el = c.document?.getElementById('epubjs-inserted-css-moyue');
+        if (el) el.textContent = '';
+      }
+    } catch { /* 忽略 */ }
+  }
+
   function applyTheme() {
+    clearThemeCss();
     rendition.themes.register('moyue', buildThemeCss(currentTheme, currentStyles));
     rendition.themes.select('moyue');
     rendition.themes.fontSize(currentStyles.fontSize + 'px');
@@ -292,15 +315,21 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   // 注意 epub.js 的 displayed 单位是「栏」不是「页」，双页模式一屏 2 栏，
   // 所以页码 = 栏号 / divisor。
 
-  /** 版式签名：模式 / 视口宽高 / 字号 / 行距 / 边距任一变化，旧索引即作废 */
+  /** 版式签名：模式 / 视口宽高 / 字号 / 行距 / 边距 / 字体任一变化，旧索引即作废 */
+  // 字体必须算进签名：换了字面，每栏能塞的字数就变了，
+  // 不重算会导致「第 66 / 142 页」的分母停在上一个字体的页数上。
   function indexSig() {
     const W = Math.round(mount.clientWidth || 0);
     const H = Math.round(mount.clientHeight || 0);
+    const fam = String(currentStyles.fontFamily || '');
+    let h = 0;
+    for (let i = 0; i < fam.length; i++) h = (h * 31 + fam.charCodeAt(i)) | 0;
     return [
       curPageMode, W >= 720 ? 'w' : 'n', W, H,
       Math.round((currentStyles.fontSize || 0) * 10),
       Math.round((currentStyles.lineHeight || 0) * 100),
       Math.round(currentStyles.margin || 0),
+      h,
     ].join('|');
   }
 
