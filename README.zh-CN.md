@@ -55,6 +55,7 @@
 - **彩色标注（6 色荧光笔）**：顶栏荧光笔面板或选中文字浮出的工具栏提供红/橙/黄/绿/蓝/紫六色，对重点句段做高亮，复读时一眼可辨。**颜色只落在字上**——EPUB 用 CSS Highlight API（`::highlight`）绘制，由浏览器按字形填充，不会像矩形覆盖层那样按行盒画出一整条比字还高的色带，也不会在翻页、改字号后错位糊到别处；TXT/MOBI/PDF 用内联 `<mark>`，同样紧贴文字。
 - **阅读批注（仿 Word 边注）**：选中文字后点「批注」，在旁白编辑区写下阅读心得（Ctrl+Enter 保存）。所有标注与批注汇总于右侧抽屉，支持**跳转 / 修改 / 删除**，并可**一键导出 Markdown** 笔记。
 - **版式调节**：字号、行距、字体（系统/宋体/华文宋体/黑体/楷体/**Times New Roman**）、页边距。字体是**强制生效**的——书里自带的 `font-family`（很多中文书会给正文段落写死「汉仪旗黑」「方正书宋」之类）会被一并覆盖，选什么就是什么；PDF 例外，字形嵌在页面里，字体按钮置灰并注明原因。
+- **全文检索（仿 Word）**：`Ctrl+F` 或顶栏放大镜唤出查找条，输入关键词即刻跳到「当前位置之后的第一条」，**回车 = 下一条，Shift+回车 = 上一条，Esc 关闭并清掉标记**；计数是全书命中数（如 `41 / 244`）。查找条开着时所有命中保持淡黄底、当前命中橙底，均由 CSS Highlight API 绘制，翻页 / 改字号 / 换字体后自动跟随，不会飘。EPUB 按 CFI 定位（被 `<em>` 切开的词也能命中），TXT/MOBI 按章号 + 文本偏移，PDF 按页号 + 页内偏移；无文字层的扫描版会如实显示「无结果」。
 - **目录导航**：EPUB 完整目录、MOBI/TXT 智能章节识别（支持「第 X 章」「Chapter N」「序/楔子/尾声」等中英文模式）
 - **书签**：Ctrl+B 随时标记，书签面板一键回跳
 - **进度记忆**：每本书独立记忆阅读位置（CFI / 页码 / 滚动比例）+ 标注数据，重开自动恢复
@@ -68,6 +69,7 @@
 | `T` | 目录/书签面板 |
 | `M` | 切换主题 |
 | `F` | 版式设置 |
+| `Ctrl+F` | 查找（回车下一条 / Shift+回车上一条） |
 | `Ctrl+B` | 添加书签 |
 | `F11` | 全屏 |
 | `Esc` | 退出面板/沉浸/返回书架 |
@@ -98,13 +100,13 @@
 
 | 版本 | 文件名 | 说明 |
 |---|---|---|
-| 安装版 | `MoYue-0.1.4-x64.exe` | 双击安装，建桌面与开始菜单快捷方式，关联 epub/pdf/mobi/txt |
-| 便携版 | `MoYue-0.1.4-portable.exe` | 单个 exe，免安装直接运行，可放 U 盘 |
+| 安装版 | `MoYue-0.1.5-x64.exe` | 双击安装，建桌面与开始菜单快捷方式，关联 epub/pdf/mobi/txt |
+| 便携版 | `MoYue-0.1.5-portable.exe` | 单个 exe，免安装直接运行，可放 U 盘 |
 
 Gitee 直链（右键另存／复制到下载工具）：
 
-- 安装版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-x64.exe`
-- 便携版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-portable.exe`
+- 安装版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.5/MoYue-0.1.5-x64.exe`
+- 便携版 `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.5/MoYue-0.1.5-portable.exe`
 
 Windows x64，未签名，SmartScreen 可能提示一次（更多信息 → 仍要运行）。
 

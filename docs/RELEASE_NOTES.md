@@ -13,10 +13,17 @@ A local-first, paper-like ebook reader for Windows — no account, no sync, no n
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.4-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
-| Portable | `MoYue-0.1.4-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.5-x64.exe` | Per-user install, desktop & Start-menu shortcuts, file associations |
+| Portable | `MoYue-0.1.5-portable.exe` | Single executable, no installation |
 
 Windows x64 · unsigned build, so SmartScreen may ask once (*More info → Run anyway*).
+
+### What changed in 0.1.5
+
+- **New: full-text search** (`Ctrl+F`, or the magnifier in the toolbar). It behaves like Word's find box: type a keyword, the book jumps to the first hit at or after where you are, `Enter` walks forward through the matches, `Shift+Enter` walks back, `Esc` closes and clears every mark. The count — `12 / 244` — is the whole book, not the current chapter.
+- **Every hit stays tinted** while the bar is open: all matches in yellow, the one you are on in orange. EPUB paints them with the CSS Custom Highlight API, so they ride along with reflow (font size, typeface, window width) instead of drifting. TXT/MOBI and PDF use the same API over their text layers.
+- **Works on all four formats.** EPUB matches the flattened text of every spine section and jumps by CFI, so a match split by `<em>`/`<span>` — very common in Chinese trade books — is still found. TXT/MOBI search the chapter text and jump by chapter + text offset, the same coordinates annotations use. PDF searches each page's text layer and jumps by page + offset; scanned PDFs with no text layer report 无结果 rather than pretending.
+- Search also works in scroll mode, and the current hit is scrolled into view rather than just onto the page.
 
 ### What changed in 0.1.4
 

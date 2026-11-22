@@ -544,6 +544,115 @@ function mobiToChapters(html) {
   }));
 }
 
+// ---------- 查找 ----------
+// 交互对齐 Word / 浏览器查找条：输入即搜，回车 = 下一条，Shift+回车 = 上一条，
+// Esc 关闭；关闭时清掉全部命中高亮，不残留任何状态。
+const searchBar = $('#searchBar');
+const searchInput = $('#searchInput');
+const searchCount = $('#searchCount');
+let searchTimer = null;
+let searchedText = '';
+
+function searchSupported() {
+  return typeof state.renderer?.search === 'function';
+}
+
+function paintSearchCount(res) {
+  const q = searchInput.value.trim();
+  const prev = $('#searchPrev');
+  const next = $('#searchNext');
+  if (!res || !res.total) {
+    searchCount.textContent = q ? '无结果' : '';
+    searchCount.classList.toggle('none', !!q);
+    prev.disabled = true;
+    next.disabled = true;
+    return;
+  }
+  searchCount.textContent = `${res.index + 1} / ${res.total}`;
+  searchCount.classList.remove('none');
+  prev.disabled = false;
+  next.disabled = false;
+}
+
+async function runSearch(text) {
+  const q = String(text || '').trim();
+  if (!q) { state.renderer?.clearSearch?.(); paintSearchCount(null); return; }
+  if (!searchSupported()) { searchCount.textContent = '此格式不支持'; return; }
+  searchedText = q;
+  searchCount.textContent = '查找中…';
+  searchCount.classList.remove('none');
+  try {
+    const res = await state.renderer.search(q);
+    // 关键词已被改掉的话，这一轮结果作废
+    if (searchInput.value.trim() !== q) return;
+    paintSearchCount(res);
+  } catch {
+    searchCount.textContent = '查找失败';
+  }
+}
+
+async function stepSearch(dir) {
+  if (!searchSupported() || typeof state.renderer.searchStep !== 'function') return;
+  if (!searchedText) return;
+  try {
+    const res = await state.renderer.searchStep(dir);
+    paintSearchCount(res);
+  } catch { /* 忽略 */ }
+  searchInput.focus();
+}
+
+function openSearch() {
+  searchBar.hidden = false;
+  $('#btnSearch').classList.add('active');
+  searchInput.focus();
+  searchInput.select();
+  if (searchInput.value.trim()) runSearch(searchInput.value.trim());
+}
+
+function closeSearch() {
+  clearTimeout(searchTimer);
+  searchBar.hidden = true;
+  $('#btnSearch').classList.remove('active');
+  searchCount.textContent = '';
+  searchCount.classList.remove('none');
+  searchedText = '';
+  state.renderer?.clearSearch?.();
+  // 焦点交还阅读区，方向键继续翻页
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+}
+
+function wireSearchUi() {
+  $('#btnSearch').addEventListener('click', () => (searchBar.hidden ? openSearch() : closeSearch()));
+  $('#searchClose').addEventListener('click', closeSearch);
+  $('#searchNext').addEventListener('click', () => stepSearch(1));
+  $('#searchPrev').addEventListener('click', () => stepSearch(-1));
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if (!q) {
+      state.renderer?.clearSearch?.();
+      paintSearchCount(null);
+      return;
+    }
+    searchTimer = setTimeout(() => runSearch(q), 260);
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      clearTimeout(searchTimer);
+      const q = searchInput.value.trim();
+      if (!q) return;
+      // 回车 = 下一条；关键词刚改过则先建立索引（此时 find 会直接跳到第一条）
+      if (q !== searchedText) runSearch(q);
+      else stepSearch(e.shiftKey ? -1 : 1);
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
+  });
+}
+
 // ---------- 主流程 ----------
 async function init() {
   const params = new URLSearchParams(location.search);
@@ -584,6 +693,7 @@ async function init() {
     else document.documentElement.requestFullscreen?.();
   });
   $('#errorBack').addEventListener('click', () => { moyue.focusShelf(); window.close(); });
+  wireSearchUi();
 
   $('#tabToc').addEventListener('click', () => showPanelTab('toc'));
   $('#tabMarks').addEventListener('click', () => showPanelTab('marks'));
@@ -619,14 +729,19 @@ async function init() {
         e.preventDefault(); state.renderer?.turnPage('prev'); break;
       case 't': case 'T': toggleSidePanel(); break;
       case 'm': case 'M': setTheme(nextTheme(state.theme)); break;
-      case 'f': case 'F': $('#typePanel').hidden = !$('#typePanel').hidden; break;
+      case 'f': case 'F':
+        // Ctrl+F 查找（沿用 Word 的手感）；单按 F 仍是版式面板
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); openSearch(); break; }
+        $('#typePanel').hidden = !$('#typePanel').hidden;
+        break;
       case 'h': case 'H': toggleHlPalette(); break;
       case 'n': case 'N': toggleAnnPanel(); break;
       case 'b': case 'B':
         if (e.ctrlKey || e.metaKey) { e.preventDefault(); addBookmark(); }
         break;
       case 'Escape':
-        if (selToolbar.isVisible()) { selToolbar.dismiss(); }
+        if (!searchBar.hidden) { closeSearch(); }
+        else if (selToolbar.isVisible()) { selToolbar.dismiss(); }
         else if (!$('#typePanel').hidden) { $('#typePanel').hidden = true; }
         else if (!$('#hlPalette').hidden) { toggleHlPalette(false); }
         else if (!$('#annPanel').classList.contains('hidden')) { toggleAnnPanel(false); }

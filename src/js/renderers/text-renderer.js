@@ -4,7 +4,7 @@
  * + 荧光笔高亮（文本流偏移定位）/ 批注跳转
  */
 import { createPageTurn } from '../page-turn.js';
-import { wrapTextRange, textFlowOffset, colorFill } from '../annotations.js';
+import { wrapTextRange, textFlowOffset, colorFill, buildTextMap, rangeFromMap, findOccurrences } from '../annotations.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const raf2 = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -286,6 +286,7 @@ export function createTextReader({ mount, stage, annStore, onProgress, onChapter
         computePages();
         goToPage(page);
         onChapterChange?.(ch.title, index);
+        paintFind();
       });
     });
   }
@@ -696,6 +697,117 @@ export function createTextReader({ mount, stage, annStore, onProgress, onChapter
 
   function clearSelection() { document.getSelection()?.removeAllRanges(); }
 
+  // ---------- 全文检索 ----------
+  // 命中位置记成「章号 + 章内文本流偏移」，与标注同一套坐标，
+  // 因此换字号、换版式、重排版之后依然指得准。
+  let findQuery = '';
+  let findHits = [];   // [{ chapter, start, end }]
+  let findIndex = -1;
+  let findToken = 0;
+  const findTextCache = new Map();
+
+  function chapterPlainText(i) {
+    if (findTextCache.has(i)) return findTextCache.get(i);
+    let text = '';
+    const ch = state.chapters[i];
+    if (ch) {
+      const div = document.createElement('div');
+      div.innerHTML = ch.html;
+      const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = walker.nextNode())) text += n.nodeValue;
+    }
+    findTextCache.set(i, text);
+    return text;
+  }
+
+  async function buildFindIndex(query) {
+    const token = findToken;
+    const hits = [];
+    for (let i = 0; i < state.chapters.length; i++) {
+      if (token !== findToken) return null;
+      for (const m of findOccurrences(chapterPlainText(i), query)) {
+        hits.push({ chapter: i, start: m.start, end: m.end });
+      }
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return hits;
+  }
+
+  function findPaintSupported() {
+    return !!(window.CSS && window.CSS.highlights && window.Highlight);
+  }
+
+  function clearFindPaint() {
+    if (!findPaintSupported()) return;
+    try {
+      CSS.highlights.delete('moyue-find');
+      CSS.highlights.delete('moyue-find-cur');
+    } catch { /* 忽略 */ }
+  }
+
+  /** 当前章里的全部命中重新登记（换章后 content 的 DOM 被换掉，必须重挂） */
+  function paintFind() {
+    if (!findPaintSupported()) return;
+    const map = buildTextMap(content);
+    const all = [];
+    const cur = [];
+    findHits.forEach((h, i) => {
+      if (h.chapter !== state.chapterIndex) return;
+      const r = rangeFromMap(map, h.start, h.end);
+      if (!r) return;
+      all.push(r);
+      if (i === findIndex) cur.push(r);
+    });
+    if (all.length) CSS.highlights.set('moyue-find', new Highlight(...all));
+    else CSS.highlights.delete('moyue-find');
+    if (cur.length) CSS.highlights.set('moyue-find-cur', new Highlight(...cur));
+    else CSS.highlights.delete('moyue-find-cur');
+  }
+
+  function clearFindState() {
+    findQuery = '';
+    findToken += 1;
+    findHits = [];
+    findIndex = -1;
+    clearFindPaint();
+  }
+
+  async function goToFind(index) {
+    const hit = findHits[index];
+    if (!hit) return;
+    findIndex = index;
+    if (hit.chapter !== state.chapterIndex) {
+      renderChapter(hit.chapter, 0);
+      await raf2();
+      await raf2();
+      await raf2();
+    }
+    paintFind();
+    const map = buildTextMap(content);
+    const r = rangeFromMap(map, hit.start, hit.end);
+    if (!r) return;
+    if (state.scrollMode) {
+      // 滚动模式下 #textContent 自己就是滚动容器（样式里给了 overflow-y:auto），
+      // scrollIntoView 在这里不可靠，直接换算 scrollTop 更稳。
+      const cr = content.getBoundingClientRect();
+      const rr = r.getBoundingClientRect();
+      content.scrollTop += rr.top - cr.top - Math.round(content.clientHeight * 0.32);
+      return;
+    }
+    const mm = state.metrics;
+    if (!mm) return;
+    // 命中点相对「第 0 栏原点」的位移 / 每步位移 = 命中所在的绝对页号。
+    // 注意不能写成 pageIndex + steps：content 的 rect 已经带着当前页的位移，
+    // 两者相减得到的本来就是从第一栏算起的绝对列偏移（写相对会一路翻到底）。
+    const cRect = content.getBoundingClientRect();
+    const rect = r.getBoundingClientRect();
+    // 用 floor 而不是 round：双页一屏两栏，第 11 栏属于第 5 屏（10、11 栏），
+    // round 会算成第 6 屏，结果命中落在屏幕左边外面一格。
+    const page = Math.max(0, Math.floor((rect.left - cRect.left + 2) / mm.stride));
+    goToPage(page);
+  }
+
   // ---------- 对外 API ----------
   const api = {
     format: 'text',
@@ -734,6 +846,32 @@ export function createTextReader({ mount, stage, annStore, onProgress, onChapter
     getSelectionContext,
     clearSelection,
     getContentElement: () => content,
+    // ---------- 全文检索（reader.js 的查找条调用） ----------
+    async search(query) {
+      const q = String(query ?? '').trim();
+      if (!q) { clearFindState(); return { total: 0, index: -1 }; }
+      if (q !== findQuery) {
+        findQuery = q;
+        findToken += 1;
+        findHits = [];
+        findIndex = -1;
+        clearFindPaint();
+        const hits = await buildFindIndex(q);
+        if (q !== findQuery) return { total: findHits.length, index: findIndex };
+        findHits = hits || [];
+      }
+      if (!findHits.length) { clearFindPaint(); return { total: 0, index: -1 }; }
+      const at = findHits.findIndex((h) => h.chapter >= state.chapterIndex);
+      await goToFind(at === -1 ? 0 : at);
+      return { total: findHits.length, index: findIndex };
+    },
+    async searchStep(dir) {
+      if (!findHits.length) return { total: 0, index: -1 };
+      const n = findHits.length;
+      await goToFind((findIndex + (dir > 0 ? 1 : -1) + n) % n);
+      return { total: n, index: findIndex };
+    },
+    clearSearch() { clearFindState(); },
     /** 新建标注后重绘当前章（保持页位置） */
     applyAnnotation(ann) {
       if (ann.loc?.chapter === state.chapterIndex) renderChapter(state.chapterIndex, state.pageIndex);

@@ -37,7 +37,7 @@ async function fetchRequest(url, type, withCredentials, headers) {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const raf2 = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-import { colorFill, HL_COLORS } from '../annotations.js';
+import { colorFill, HL_COLORS, buildTextMap, rangeFromMap, findOccurrences } from '../annotations.js';
 import { createPageTurn } from '../page-turn.js';
 
 export async function createEpubReader({ mount, url, position, styles, theme, annStore, onProgress, onToc, onSelection, pageMode = 'dual', turnFx = 'slide' }) {
@@ -46,6 +46,14 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
 
   let currentTheme = theme;
   let currentStyles = styles;
+
+  // 全文检索状态。必须在这里声明：attachEngine() 在建渲染器时就会调用 paintFind()，
+  // 若声明放到下面的检索区，那一刻还在 TDZ 里，会抛
+  // "Cannot access 'findHits' before initialization" 并让整本书打不开。
+  let findQuery = '';
+  let findHits = [];   // [{ spineIndex, cfi }]
+  let findIndex = -1;
+  let findToken = 0;   // 关键词被改动时作废上一轮索引
 
   // 阅读区内的“书页”容器：上下各留一行空白（左右留白交给 epub.js 的 column gap，
   // 这样双页时「外边距」与「中缝间距」严格等距）
@@ -897,6 +905,7 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     tuneTypography();
     // 每节渲染完成后重新登记一次高亮（新文档 = 新的 CSS.highlights 集合）
     paintHighlights();
+    paintFind();
   };
   rendition.on('rendered', attachEngine);
   rendition.on('displayed', attachEngine);
@@ -976,6 +985,117 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
   async function applyStoredAnnotations() {
     await annStore.load();
     paintHighlights();
+  }
+
+  // ---------- 全文检索 ----------
+  // 命中位置用 CFI 记，跳转走 rendition.display(cfi)；
+  // 上色用 CSS Highlight API（两套：全部命中 + 当前命中），重排后自动跟随。
+  // 状态声明在 hlSupported() 附近（见上），因为 attachEngine 在初始化阶段就会调用 paintFind()。
+
+  function findStyleCss() {
+    return [
+      '::highlight(moyue-find){background-color:rgba(255,214,64,.62);}',
+      '::highlight(moyue-find-cur){background-color:rgba(255,146,28,.9);}',
+    ].join('\n');
+  }
+
+  function ensureFindStyle(doc) {
+    if (!doc || doc.__moyueFindStyle) return;
+    doc.__moyueFindStyle = true;
+    const st = doc.createElement('style');
+    st.id = 'moyue-find-style';
+    st.textContent = findStyleCss();
+    (doc.head || doc.documentElement).appendChild(st);
+  }
+
+  /** 当前显示的每一节里重新登记检索高亮（换章 / 换页后 DOM 重建，必须重挂） */
+  function paintFind() {
+    for (const c of rendition.getContents()) {
+      const doc = c?.document;
+      const win = doc?.defaultView;
+      if (!doc || !hlSupported(win)) continue;
+      ensureFindStyle(doc);
+      const all = [];
+      const cur = [];
+      findHits.forEach((h, i) => {
+        if (h.spineIndex !== c.sectionIndex) return;
+        try {
+          const r = c.range(h.cfi);
+          if (!r || r.collapsed) return;
+          all.push(r);
+          if (i === findIndex) cur.push(r);
+        } catch { /* CFI 失效时跳过 */ }
+      });
+      if (all.length) win.CSS.highlights.set('moyue-find', new win.Highlight(...all));
+      else win.CSS.highlights.delete('moyue-find');
+      if (cur.length) win.CSS.highlights.set('moyue-find-cur', new win.Highlight(...cur));
+      else win.CSS.highlights.delete('moyue-find-cur');
+    }
+  }
+
+  function clearFindPaint() {
+    try {
+      for (const c of rendition.getContents()) {
+        const win = c?.document?.defaultView;
+        if (!win?.CSS?.highlights) continue;
+        win.CSS.highlights.delete('moyue-find');
+        win.CSS.highlights.delete('moyue-find-cur');
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  function clearFindState() {
+    findQuery = '';
+    findToken += 1;
+    findHits = [];
+    findIndex = -1;
+    clearFindPaint();
+  }
+
+  /**
+   * 建全书索引：逐章 load 后把文本拍平再找，命中处用 section.cfiFromRange 换成 CFI。
+   * 每章之间让出一次事件循环，几十万字的书也不会把界面钉死。
+   */
+  async function buildFindIndex(query) {
+    const token = findToken;
+    const hits = [];
+    for (let i = 0; i < book.spine.length; i++) {
+      if (token !== findToken) return null;
+      const section = book.spine.get(i);
+      if (!section) continue;
+      let contents;
+      try {
+        contents = await section.load(book.load.bind(book));
+      } catch { continue; }
+      const doc = contents?.ownerDocument || contents;
+      if (!doc || typeof doc.createRange !== 'function') continue;
+      const map = buildTextMap(doc.body || doc.documentElement);
+      for (const m of findOccurrences(map.text, query)) {
+        const range = rangeFromMap(map, m.start, m.end);
+        if (!range) continue;
+        let cfi = '';
+        try { cfi = section.cfiFromRange(range); } catch { cfi = ''; }
+        if (cfi) hits.push({ spineIndex: i, cfi });
+      }
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return hits;
+  }
+
+  async function goToFind(index) {
+    const hit = findHits[index];
+    if (!hit) return;
+    findIndex = index;
+    try { await rendition.display(hit.cfi); } catch { /* 忽略 */ }
+    paintFind();
+  }
+
+  /** 从「当前阅读位置」往后找第一条，没有就从头开始（Word 的默认行为） */
+  function firstHitFromHere() {
+    let spine = 0;
+    try { spine = rendition.currentLocation()?.start?.index ?? 0; } catch { spine = 0; }
+    const i = findHits.findIndex((h) => h.spineIndex >= spine);
+    return i === -1 ? 0 : i;
   }
 
   function applyAnnotation(ann) {
@@ -1103,6 +1223,35 @@ export async function createEpubReader({ mount, url, position, styles, theme, an
     },
     clearSelection() {
       iframeEl()?.contentWindow?.getSelection()?.removeAllRanges();
+    },
+    // ---------- 全文检索（reader.js 的查找条调用） ----------
+    async search(query) {
+      const q = String(query ?? '').trim();
+      if (!q) { clearFindState(); return { total: 0, index: -1 }; }
+      if (q !== findQuery) {
+        findQuery = q;
+        findToken += 1;
+        findHits = [];
+        findIndex = -1;
+        clearFindPaint();
+        const hits = await buildFindIndex(q);
+        if (q !== findQuery) return { total: findHits.length, index: findIndex }; // 已被新关键词取代
+        findHits = hits || [];
+      }
+      if (!findHits.length) { clearFindPaint(); return { total: 0, index: -1 }; }
+      const start = firstHitFromHere();
+      await goToFind(start);
+      return { total: findHits.length, index: findIndex };
+    },
+    async searchStep(dir) {
+      if (!findHits.length) return { total: 0, index: -1 };
+      const n = findHits.length;
+      const next = (findIndex + (dir > 0 ? 1 : -1) + n) % n;
+      await goToFind(next);
+      return { total: n, index: findIndex };
+    },
+    clearSearch() {
+      clearFindState();
     },
     destroy() {
       destroyed = true;

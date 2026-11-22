@@ -33,6 +33,7 @@ It is a single-purpose, offline Windows app. No account, no sync, no telemetry, 
 - **A page number for the whole book.** `Page 35 / 212`, not `chapter 3, page 2`. It advances by exactly 1 per turn and stays stable when you change font size, page mode, or window width.
 - **The pointer belongs to text selection. Only the edge arrows page.** Mouse drag, trackpad swipe and *any* click on the text area are deliberately non-paging: highlighting a passage means dragging across it, and every accidental turn threw the selection away. Paging is therefore keyboard `←`/`→` and the two hover arrows at the screen edges (each a 64 × 148 px hit target, so a click never lands in the gap). Double-click-to-select-word, links and the text cursor behave exactly as in a browser.
 - **Real book typography.** 2-em first-line indent, 0.26 em paragraph spacing, justified text with `text-justify: inter-character`, `line-break: strict`, `text-spacing-trim` / `text-autospace` for CJK–Latin mixing. EPUB only gets an indent injected when the publisher supplied neither indent nor paragraph spacing.
+- **Find text like Word does.** `Ctrl+F`, type a word, and the book jumps to the first match at or after your position; `Enter` walks forward, `Shift+Enter` back, `Esc` closes and clears. The counter is the whole book (`41 / 244`), every hit stays tinted while the bar is open, and the current one is orange.
 - **A hand-written MOBI parser.** No conversion step, no Calibre. PalmDOC LZ77 + HUFF/CDIC, MOBI6 and KF8, EXTH metadata, cover & inline image extraction, DRM detection.
 - **Annotations with three different locators.** CFI for EPUB, in-chapter text offsets for TXT/MOBI, in-page offsets for PDF — all landing in one store, exportable as Markdown.
 - **Highlights colour the glyphs, not the line.** EPUB paints them with the CSS Custom Highlight API (`::highlight`), so the browser fills the text's own shape: no full-height bar over the leading, no stale rectangles left behind after a page turn or a font-size change. TXT/MOBI/PDF use inline `<mark>`, which hugs the text the same way.
@@ -84,6 +85,7 @@ Three paper themes — **Day** (warm white), **Night** (deep grey), **Eye-care**
 | `T` | TOC / bookmarks panel |
 | `M` | Cycle theme |
 | `F` | Typography settings |
+| `Ctrl+F` | Find (Enter: next, Shift+Enter: previous) |
 | `Ctrl+B` | Add bookmark |
 | `F11` | Full screen |
 | `Esc` | Close panel / leave immersive mode / back to library |
@@ -99,13 +101,13 @@ Two mirrors, same binaries:
 
 | Build | File | Notes |
 |---|---|---|
-| Installer | `MoYue-0.1.4-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
-| Portable | `MoYue-0.1.4-portable.exe` | Single executable, no installation |
+| Installer | `MoYue-0.1.5-x64.exe` | Per-user install, creates desktop & Start-menu shortcuts, registers file associations |
+| Portable | `MoYue-0.1.5-portable.exe` | Single executable, no installation |
 
 Direct Gitee links:
 
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-x64.exe`
-- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.4/MoYue-0.1.4-portable.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.5/MoYue-0.1.5-x64.exe`
+- `https://gitee.com/huanledeshuchang/moyue-reader/releases/download/v0.1.5/MoYue-0.1.5-portable.exe`
 
 Windows x64. The binaries are unsigned, so SmartScreen may ask you to confirm once (*More info → Run anyway*).
 

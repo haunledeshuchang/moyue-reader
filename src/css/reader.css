@@ -330,6 +330,40 @@ mark.hl { color: inherit; border-radius: 2px; transition: background .2s; }
 .seg button:disabled, .seg.disabled button { opacity: .38; cursor: not-allowed; }
 .seg.disabled { cursor: not-allowed; }
 
+/* ---------- 查找条 ---------- */
+.search-bar {
+  position: absolute; top: 54px; right: 16px; z-index: 46;
+  display: flex; align-items: center; gap: 3px;
+  min-width: 320px; padding: 5px 6px 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.08);
+}
+.search-bar .search-icon { color: var(--text-3); flex: none; }
+#searchInput {
+  flex: 1; min-width: 0; border: none; background: transparent; outline: none;
+  font-size: 13px; color: var(--text); font-family: inherit; padding: 4px 2px;
+}
+#searchInput::placeholder { color: var(--text-3); }
+.search-count {
+  flex: none; font-size: 11.5px; color: var(--text-2);
+  font-variant-numeric: tabular-nums; padding: 0 3px; white-space: nowrap;
+}
+.search-count.none { color: #c0392b; }
+.search-nav {
+  width: 26px; height: 26px; flex: none; border: none; border-radius: 6px;
+  background: transparent; color: var(--text-2); cursor: pointer;
+  display: inline-grid; place-items: center; font-family: inherit;
+  transition: background .15s, color .15s;
+}
+.search-nav:hover { background: var(--hover); color: var(--text); }
+.search-nav:disabled { opacity: .32; cursor: default; background: transparent; }
+
+/* 检索命中：全部命中淡黄，当前命中橙底（TXT / PDF 在主文档，EPUB 各自注入 iframe） */
+::highlight(moyue-find) { background-color: rgba(255,214,64,.62); }
+::highlight(moyue-find-cur) { background-color: rgba(255,146,28,.9); }
+
 input[type="range"] { flex: 1; accent-color: var(--accent); }
 
 /* ---------- 荧光笔颜色面板 ---------- */

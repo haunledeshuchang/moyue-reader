@@ -4,7 +4,7 @@
  * 文本层：透明可选中文字覆盖在画布上，支撑荧光笔高亮与批注（页内文本流偏移定位）
  */
 
-import { wrapTextRange, textFlowOffset, colorFill } from '../annotations.js';
+import { wrapTextRange, textFlowOffset, colorFill, buildTextMap, rangeFromMap, findOccurrences } from '../annotations.js';
 
 export async function createPdfReader({ mount, url, position, annStore, onProgress, onToc, onReady, onSelection }) {
   const pdfjs = await import('/src/vendor/pdf.mjs');
@@ -91,7 +91,106 @@ export async function createPdfReader({ mount, url, position, annStore, onProgre
     for (const a of (annStore ? annStore.forPage(num) : [])) {
       wrapTextRange(layer, a.loc.start, a.loc.end, { fill: colorFill(a.color), id: a.id });
     }
+    paintFind(); // 文本层重建 → 检索高亮重挂
   }
+
+  // ---------- 全文检索 ----------
+  // 命中记成「页号 + 页内文本流偏移」，文本层重建后按同一坐标重新定位。
+  let findQuery = '';
+  let findHits = [];   // [{ page, start, end }]
+  let findIndex = -1;
+  let findToken = 0;
+  const pageTextCache = new Map();
+
+  /** 取某页的文字（与文本层用同一套过滤条件，保证偏移一致） */
+  async function pageText(num) {
+    if (pageTextCache.has(num)) return pageTextCache.get(num);
+    let s = '';
+    try {
+      const page = await doc.getPage(num);
+      const tc = await page.getTextContent();
+      s = tc.items.filter((it) => it.transform && it.str).map((it) => it.str).join('');
+    } catch { s = ''; }
+    pageTextCache.set(num, s);
+    return s;
+  }
+
+  async function buildFindIndex(query) {
+    const token = findToken;
+    const hits = [];
+    for (let num = 1; num <= doc.numPages; num++) {
+      if (token !== findToken) return null;
+      const text = await pageText(num);
+      for (const m of findOccurrences(text, query)) hits.push({ page: num, start: m.start, end: m.end });
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return hits;
+  }
+
+  function findPaintSupported() {
+    return !!(window.CSS && window.CSS.highlights && window.Highlight);
+  }
+
+  function clearFindPaint() {
+    if (!findPaintSupported()) return;
+    try {
+      CSS.highlights.delete('moyue-find');
+      CSS.highlights.delete('moyue-find-cur');
+    } catch { /* 忽略 */ }
+  }
+
+  /** 把当前已渲染页面里的命中登记成 Range（未渲染的页没有文本层，等它渲染时再补） */
+  function paintFind() {
+    if (!findPaintSupported()) return;
+    const maps = new Map();
+    const all = [];
+    const cur = [];
+    findHits.forEach((h, i) => {
+      const layer = layers[h.page - 1];
+      if (!layer || !layer.childElementCount) return;
+      let map = maps.get(h.page);
+      if (!map) { map = buildTextMap(layer); maps.set(h.page, map); }
+      const r = rangeFromMap(map, h.start, h.end);
+      if (!r) return;
+      all.push(r);
+      if (i === findIndex) cur.push(r);
+    });
+    try {
+      if (all.length) CSS.highlights.set('moyue-find', new Highlight(...all));
+      else CSS.highlights.delete('moyue-find');
+      if (cur.length) CSS.highlights.set('moyue-find-cur', new Highlight(...cur));
+      else CSS.highlights.delete('moyue-find-cur');
+    } catch { /* 忽略 */ }
+  }
+
+  function clearFindState() {
+    findQuery = '';
+    findToken += 1;
+    findHits = [];
+    findIndex = -1;
+    clearFindPaint();
+  }
+
+  async function goToFind(index) {
+    const hit = findHits[index];
+    if (!hit) return;
+    findIndex = index;
+    const moved = hit.page !== currentPageNum;
+    currentPageNum = hit.page;
+    scrollToPage(hit.page, moved);
+    renderVisible();
+    emitProgress();
+    const layer = layers[hit.page - 1];
+    for (let i = 0; i < 80; i++) {
+      if (layer && layer.childElementCount) break;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    paintFind();
+    const map = buildTextMap(layer);
+    const r = rangeFromMap(map, hit.start, hit.end);
+    r?.startContainer.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
 
   async function renderPage(num) {
     if (renderedPages.has(num)) return;
@@ -398,6 +497,32 @@ export async function createPdfReader({ mount, url, position, annStore, onProgre
       }, 500);
     },
     clearSelection() { document.getSelection()?.removeAllRanges(); },
+    // ---------- 全文检索（reader.js 的查找条调用） ----------
+    async search(query) {
+      const q = String(query ?? '').trim();
+      if (!q) { clearFindState(); return { total: 0, index: -1 }; }
+      if (q !== findQuery) {
+        findQuery = q;
+        findToken += 1;
+        findHits = [];
+        findIndex = -1;
+        clearFindPaint();
+        const hits = await buildFindIndex(q);
+        if (q !== findQuery) return { total: findHits.length, index: findIndex };
+        findHits = hits || [];
+      }
+      if (!findHits.length) { clearFindPaint(); return { total: 0, index: -1 }; }
+      const at = findHits.findIndex((h) => h.page >= currentPageNum);
+      await goToFind(at === -1 ? 0 : at);
+      return { total: findHits.length, index: findIndex };
+    },
+    async searchStep(dir) {
+      if (!findHits.length) return { total: 0, index: -1 };
+      const n = findHits.length;
+      await goToFind((findIndex + (dir > 0 ? 1 : -1) + n) % n);
+      return { total: n, index: findIndex };
+    },
+    clearSearch() { clearFindState(); },
     destroy() {
       mount.removeEventListener('scroll', onScroll);
       try { doc.cleanup(); } catch {}

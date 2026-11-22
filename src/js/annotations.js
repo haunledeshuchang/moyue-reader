@@ -132,3 +132,72 @@ export function markPageIndex(mark, contentEl, pageWidth, gap, currentPage) {
   const stride = pageWidth + gap;
   return Math.max(0, Math.min(999, currentPage + Math.round(dx / stride)));
 }
+
+/* ---------- 检索用：文本流映射与命中查找 ---------- */
+
+/**
+ * 把根元素的全部文本节点拍平成「一条文本流 + 偏移 → 节点」的映射。
+ * 检索必须在拍平后的整条流上做 indexOf，否则被 <em>/<span> 切开的词
+ * （中文书里「重**要**」这种强调很常见）永远搜不到。
+ */
+export function buildTextMap(root) {
+  const nodes = [];
+  let text = '';
+  if (root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      nodes.push({ node: n, start: text.length });
+      text += n.nodeValue;
+    }
+  }
+  return {
+    text,
+    locate(pos) {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        if (nodes[i].start <= pos) {
+          const off = Math.min(pos - nodes[i].start, nodes[i].node.nodeValue.length);
+          return [nodes[i].node, off];
+        }
+      }
+      return null;
+    },
+  };
+}
+
+/** 由文本流偏移生成 Range（节点被拆过也不会错位） */
+export function rangeFromMap(map, start, end) {
+  const a = map.locate(start);
+  const b = map.locate(end);
+  if (!a || !b) return null;
+  const doc = a[0].ownerDocument;
+  if (!doc) return null;
+  const r = doc.createRange();
+  try {
+    r.setStart(a[0], a[1]);
+    r.setEnd(b[0], b[1]);
+  } catch { return null; }
+  return r;
+}
+
+/**
+ * 在整条文本流里找全部命中（默认忽略西文大小写，与 Word 的「区分大小写」未勾选时一致）。
+ * 文本流偏移始终按原串计算，绝不因大小写折叠而漂移。
+ */
+export function findOccurrences(text, query) {
+  const out = [];
+  const q0 = String(query ?? '');
+  if (!text || !q0) return out;
+  const lowText = text.toLowerCase();
+  // 少数语言 toLowerCase 会改变长度，那种情况下退回原串比较，宁可略保守也不串位
+  const fold = lowText.length === text.length;
+  const hay = fold ? lowText : text;
+  const needle = fold ? q0.toLowerCase() : q0;
+  let from = 0;
+  let at;
+  while ((at = hay.indexOf(needle, from)) !== -1) {
+    out.push({ start: at, end: at + needle.length });
+    from = at + Math.max(1, needle.length);
+  }
+  return out;
+}
